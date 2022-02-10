@@ -1,2 +1,2 @@
 # project-poseidon
-Codebaes for Project Poseidon data pipelines.  
+Repository for Project Poseidon data pipelines.  
