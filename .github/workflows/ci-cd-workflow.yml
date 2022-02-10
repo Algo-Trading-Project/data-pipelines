@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@master
-    - uses: Project-Poseidon/project-poseidon/s3-sync-action@master
+    - uses: project-poseidon/s3-sync-action@master
       with:
         args: --acl private --follow-symlinks --delete --exclude '.git/*'
       env:
