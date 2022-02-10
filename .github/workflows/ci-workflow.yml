@@ -2,12 +2,12 @@ name: CI for MWAA
 on: 
   push:
     branches:
-    - main
+    - master
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@main
+    - uses: actions/checkout@master
     - uses: /s3-sync-action@master
       with:
         args: --acl private --follow-symlinks --delete --exclude '.git/*'
