@@ -1,4 +1,3 @@
-import re
 import requests
 import json
 
@@ -93,19 +92,19 @@ class TransactionScraper:
         response = requests.get(request_url).text
         return json.loads(response)
 
-infura_endpoint = 'https://mainnet.infura.io/v3/697f7138e01947fe909c0b438b74a261'
-etherscan_api_key = 'WUYJ9F4ESXW3IA33W231RMQ8BJK5C9G464'
+# infura_endpoint = 'https://mainnet.infura.io/v3/697f7138e01947fe909c0b438b74a261'
+# etherscan_api_key = 'WUYJ9F4ESXW3IA33W231RMQ8BJK5C9G464'
 
-tx_scraper = TransactionScraper(etherscan_api_key = etherscan_api_key,
-                                infura_endpoint = infura_endpoint)
+# tx_scraper = TransactionScraper(etherscan_api_key = etherscan_api_key,
+#                                 infura_endpoint = infura_endpoint)
 
-tx_hash = '0x8d5f3c06d0931be19a73290548d5e01161690ff03143b2297bf59d343e59148a'
+# tx_hash = '0x8d5f3c06d0931be19a73290548d5e01161690ff03143b2297bf59d343e59148a'
 
-internal_txs = tx_scraper.get_internal_txs_for_tx(tx_hash = tx_hash)
-internal_events = tx_scraper.decode_logs_from_transaction(tx_hash = tx_hash)
+# internal_txs = tx_scraper.get_internal_txs_for_tx(tx_hash = tx_hash)
+# internal_events = tx_scraper.decode_logs_from_transaction(tx_hash = tx_hash)
 
-print()
-print(internal_txs)
+# print()
+# print(internal_txs)
 
 # for tx in internal_events:
 #     print()
