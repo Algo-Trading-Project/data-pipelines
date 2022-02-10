@@ -1,19 +1,18 @@
-1.	name: CI for MWAA
-2.	on: 
-3.	  push:
-4.	    branches:
-5.	    - main
-6.	
-7.	jobs:
-8.	  deploy:
-9.	    runs-on: ubuntu-latest
-10.	    steps:
-11.	    - uses: actions/checkout@main
-12.	    - uses: /s3-sync-action@master
-13.	      with:
-14.	        args: --acl private --follow-symlinks --delete --exclude '.git/*'
-15.	      env:
-16.	        AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
-17.	        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-18.	        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-19.	        AWS_REGION: 'us-west-2'   # optional: defaults to us-east-1
+name: CI for MWAA
+on: 
+  push:
+    branches:
+    - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@main
+    - uses: /s3-sync-action@master
+      with:
+        args: --acl private --follow-symlinks --delete --exclude '.git/*'
+      env:
+        AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION: 'us-west-2'   # optional: defaults to us-east-1
