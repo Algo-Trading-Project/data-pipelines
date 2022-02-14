@@ -1,0 +1,9 @@
+apache-airflow
+datetime
+web3
+distutils
+botocore
+boto3
+requests
+json
+apache-airflow-providers-amazon

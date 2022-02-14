@@ -169,21 +169,12 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
     def execute(self, context):
         self.__set_up_connections()
-        print('finished setting up connections...')
-        print()
+       
         block_data, transaction_batch = self.__get_block_data()
-        print('finished getting block data...')
-        print()
         transaction_data = self.__get_transaction_data(transaction_batch)
-        print('finished getting transaction data...')
-        print()
         transfer_data = self.__get_transfer_data()
-        print('finished getting transfer data...')
-        print()
-
+        
         self.__upload_to_s3(block_data, transaction_data, transfer_data)
-        print('upload to s3 went through...')
-        print()
         # Variable.set(
         #     key = 'start_block',
         #     value = str(int(Variable.get('end_block')) + 1)
@@ -192,5 +183,3 @@ class Web3AlchemyToS3Operator(BaseOperator):
         #     key = 'end_block',
         #     value = str(self.web3_instance.eth.block_number)
         # )
-
-        
