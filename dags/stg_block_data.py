@@ -49,20 +49,3 @@ with DAG('test', start_date = datetime.datetime.now(), schedule_interval = '@hou
     )
     
     eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift]
-    
-    # s3_block_data_to_redshift.execute({})
-    # print('s3 block data is in redshift')
-    # print()
-
-    # s3_block_data_to_redshift.execute({})
-    # print('s3 transaction data is in redshift')
-    # print()
-
-    # s3_block_data_to_redshift.execute({})
-    # print('s3 transfer data is in redshift')
-    # print()
-
-    # print('dag run completed!!!!')
-
-#     # sudo lsof -i tcp:8080
-#     # kill -9 25092.\\
