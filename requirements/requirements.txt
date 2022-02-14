@@ -3,8 +3,4 @@ apache-airflow==2.0.2
 apache-airflow-providers-amazon==1.3.0
 boto3==1.17.53
 botocore==1.20.53
-datetime
-web3
-distutils
-requests
-json
+web3==5.27.0
