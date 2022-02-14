@@ -5,7 +5,7 @@ from airflow.models import BaseOperator
 from airflow.models import Variable
 from botocore.config import Config
 
-from web3 import Web3
+# from web3 import Web3
 
 import requests as r
 import json
