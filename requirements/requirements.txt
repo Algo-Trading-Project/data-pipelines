@@ -1,4 +1,7 @@
+--constraint "https://raw.githubusercontent.com/apache/airflow/constraints-{Airflow-version}/constraints-3.7.txt"
 apache-airflow
+apache-airflow[package-extra]==2.0.2
+apache-airflow-backport-providers-amazon
 datetime
 web3
 distutils
