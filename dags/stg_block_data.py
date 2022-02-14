@@ -5,7 +5,6 @@ from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 import datetime
-from web3 import Web3
 from airflow.api.client.local_client import Client
 
 with DAG('test', start_date = datetime.datetime.now(), schedule_interval = '@hourly') as dag:
