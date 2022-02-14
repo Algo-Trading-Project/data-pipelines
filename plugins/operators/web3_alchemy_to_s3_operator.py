@@ -27,8 +27,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
     ############################ HELPER FUNCTIONS ##########################################
     def __set_up_connections(self):
-        web_provider = web3.Web3.HTTPProvider(self.node_endpoint)
-        self.web3_instance = web3.Web3(web_provider)
+        from web3 import Web3
+        
+        web_provider = Web3.HTTPProvider(self.node_endpoint)
+        self.web3_instance = Web3(web_provider)
 
         self.s3_connection = S3Hook(
             aws_conn_id = 's3_conn'
