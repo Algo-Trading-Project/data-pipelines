@@ -7,7 +7,7 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 import datetime
 from airflow.api.client.local_client import Client
 
-with DAG('test', start_date = datetime.datetime.now(), schedule_interval = '@hourly[') as dag:
+with DAG('test', start_date = datetime.datetime.now(), schedule_interval = '@hourly') as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
         batch_size = 1000,
