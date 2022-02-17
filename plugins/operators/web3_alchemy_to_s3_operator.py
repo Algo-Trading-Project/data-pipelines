@@ -175,3 +175,9 @@ class Web3AlchemyToS3Operator(BaseOperator):
         transfer_data = self.__get_transfer_data()
         
         self.__upload_to_s3(block_data, transaction_data, transfer_data)
+
+        new_start_block = int(Variable.get('end_block')) + 1
+        new_end_block = int(self.web3_instance.eth.block_number)
+
+        Variable.set(key = 'start_block', value = new_start_block)
+        Variable.set(key = 'end_block', value = new_end_block)
