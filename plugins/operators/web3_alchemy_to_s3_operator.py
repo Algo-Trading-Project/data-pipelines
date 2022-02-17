@@ -1,11 +1,6 @@
-from distutils.command.config import config
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
 from airflow.models import BaseOperator
 from airflow.models import Variable
-from botocore.config import Config
-
-# from web3 import Web3
 
 import requests as r
 import json
@@ -65,8 +60,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
             
             processed_transfer['transaction_hash'] = preprocessed_transfer['hash']
             processed_transfer['block_no'] = int(preprocessed_transfer['blockNum'], 0)
-            processed_transfer['from'] = preprocessed_transfer['from']
-            processed_transfer['to'] = preprocessed_transfer['to']
+            processed_transfer['from_'] = preprocessed_transfer['from']
+            processed_transfer['to_'] = preprocessed_transfer['to']
             processed_transfer['token_units'] = preprocessed_transfer['value']
             processed_transfer['raw_token_units'] = int(preprocessed_transfer['rawContract']['value'], 0)
             processed_transfer['asset'] = preprocessed_transfer['asset']
@@ -89,15 +84,15 @@ class Web3AlchemyToS3Operator(BaseOperator):
         for block in preprocessed_blocks:
             processed_block_data = {}
             
-            processed_block_data['block_no'] = block['number']
+            processed_block_data['block_no'] = int(block['number'])
             processed_block_data['hash'] = block['hash'].hex()
             processed_block_data['parent_hash'] = block['parentHash'].hex()
-            processed_block_data['timestamp'] = block['timestamp']
-            processed_block_data['difficulty'] = block['difficulty']
+            processed_block_data['timestamp'] = int(block['timestamp'])
+            processed_block_data['difficulty'] = int(block['difficulty'])
             processed_block_data['miner'] = block['miner']
             processed_block_data['gas_used'] = block['gasUsed']
-            processed_block_data['size'] = block['size']
-            processed_block_data['sha3uncles'] = block['sha3Uncles'].hex()
+            processed_block_data['size'] = int(block['size'])
+            processed_block_data['sha3_uncles'] = block['sha3Uncles'].hex()
             processed_block_data['gas_limit'] = block['gasLimit']
 
             block_batch.append(processed_block_data)
@@ -133,9 +128,9 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
             processed_transaction['transaction_hash'] = transaction['hash'].hex()
             processed_transaction['block_no'] = transaction['blockNumber']
-            processed_transaction['to'] = transaction['to']
-            processed_transaction['from'] = transaction['from']
-            processed_transaction['value'] = transaction['value']
+            processed_transaction['to_'] = transaction['to']
+            processed_transaction['from_'] = transaction['from']
+            processed_transaction['value'] = int(transaction['value'])
             processed_transaction['gas'] = transaction['gas']
             processed_transaction['gas_price'] = transaction['gasPrice']
 
@@ -146,22 +141,25 @@ class Web3AlchemyToS3Operator(BaseOperator):
         return processed_transactions
 
     def __upload_to_s3(self, block_data, transaction_data, transfer_data):
+        json_block_data = json.dumps(block_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
-            json.dumps(block_data),
+            json_block_data,
             key = 'eth_data/blocks.json',
             bucket_name = self.bucket_name,
             replace = True
         )
 
+        json_transaction_data = json.dumps(transaction_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
-            json.dumps(transaction_data),
+            json_transaction_data,
             key = 'eth_data/transactions.json',
             bucket_name = self.bucket_name,
             replace = True
         )
 
+        json_transfer_data = json.dumps(transfer_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
-            json.dumps(transfer_data),
+            json_transfer_data,
             key = 'eth_data/transfers.json',
             bucket_name = self.bucket_name,
             replace = True
