@@ -63,7 +63,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transfer['from_'] = preprocessed_transfer['from']
             processed_transfer['to_'] = preprocessed_transfer['to']
             processed_transfer['token_units'] = str(preprocessed_transfer['value'])
-            processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'], 0)
+            processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'])
             processed_transfer['asset'] = preprocessed_transfer['asset']
             processed_transfer['category'] = preprocessed_transfer['category']
             processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address']
