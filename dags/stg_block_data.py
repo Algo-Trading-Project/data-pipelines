@@ -69,5 +69,3 @@ with DAG('test', start_date = start_date, schedule_interval = schedule_interval)
     )
 
     eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift]
-
-    print(pytz.all_timezones)
