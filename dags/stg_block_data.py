@@ -8,7 +8,7 @@ import pytz
 
 timezone = pytz.timezone('America/Los_Angeles')
 schedule_interval = timedelta(minutes = 5)
-start_date = timezone.localize(datetime(year = 2022, month = 2, day = 17))
+start_date = timezone.localize(datetime(year = 2022, month = 2, day = 17, hour = 23))
 
 with DAG('test', start_date = start_date, schedule_interval = schedule_interval) as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
