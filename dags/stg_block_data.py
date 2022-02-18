@@ -1,16 +1,16 @@
 from airflow import DAG
 from airflow.models import Variable
-from pendulum import now
-
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 from datetime import timedelta, datetime
+import pytz
 
-
+timezone = pytz.timezone('America/Los_Angeles')
 schedule_interval = timedelta(minutes = 5)
+start_date = timezone.localize(datetime(year = 2022, month = 2, day = 17))
 
-with DAG('test', start_date = datetime.now(), schedule_interval = schedule_interval) as dag:
+with DAG('test', start_date = start_date, schedule_interval = schedule_interval) as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
         batch_size = 1000,
@@ -69,3 +69,5 @@ with DAG('test', start_date = datetime.now(), schedule_interval = schedule_inter
     )
 
     eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift]
+
+    print(pytz.all_timezones)
