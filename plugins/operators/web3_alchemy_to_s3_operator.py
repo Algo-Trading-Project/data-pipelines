@@ -179,6 +179,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
     ############################ HELPER FUNCTIONS END ######################################
 
     def execute(self, context):
+        print()
+        print('start block: {}'.format(Variable.get(key = 'start_block')))
+        print('end block: {}'.format(Variable.get(key = 'end_block')))
+        print()
         self.__set_up_connections()
        
         block_data, transaction_batch = self.__get_block_data()
@@ -193,3 +197,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         Variable.set(key = 'start_block', value = new_start_block)
         Variable.set(key = 'end_block', value = new_end_block)
+
+        print()
+        print('new start block: {}'.foramt(new_start_block))
+        print('new end block: {}'.foramt(new_end_block))
