@@ -1,4 +1,3 @@
---constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.0.2/constraints-3.7.txt"
-web3==5.27.0
+web3==5.28.0
+/usr/local/airflow/plugins/web3-5.28.0-py3-none-any.whl
 https://files.pythonhosted.org/packages/93/10/c76b84ab1d4ab21acc534ff0d73f2464d67a3202e4174e20119ae1ec8d0b/web3-5.28.0-py3-none-any.whl
-
