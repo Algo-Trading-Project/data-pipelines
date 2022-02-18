@@ -62,8 +62,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transfer['block_no'] = int(preprocessed_transfer['blockNum'], 0)
             processed_transfer['from_'] = preprocessed_transfer['from']
             processed_transfer['to_'] = preprocessed_transfer['to']
-            processed_transfer['token_units'] = preprocessed_transfer['value']
-            processed_transfer['raw_token_units'] = int(preprocessed_transfer['rawContract']['value'], 0)
+            processed_transfer['token_units'] = str(preprocessed_transfer['value'])
+            processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'], 0)
             processed_transfer['asset'] = preprocessed_transfer['asset']
             processed_transfer['category'] = preprocessed_transfer['category']
             processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address']
@@ -90,10 +90,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_block_data['timestamp'] = int(block['timestamp'])
             processed_block_data['difficulty'] = int(block['difficulty'])
             processed_block_data['miner'] = block['miner']
-            processed_block_data['gas_used'] = block['gasUsed']
+            processed_block_data['gas_used'] = int(block['gasUsed'])
             processed_block_data['size'] = int(block['size'])
             processed_block_data['sha3_uncles'] = block['sha3Uncles'].hex()
-            processed_block_data['gas_limit'] = block['gasLimit']
+            processed_block_data['gas_limit'] = int(block['gasLimit'])
 
             block_batch.append(processed_block_data)
             transaction_batch.append(block['transactions'])
@@ -127,12 +127,12 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transaction = {}
 
             processed_transaction['transaction_hash'] = transaction['hash'].hex()
-            processed_transaction['block_no'] = transaction['blockNumber']
+            processed_transaction['block_no'] = int(transaction['blockNumber'])
             processed_transaction['to_'] = transaction['to']
             processed_transaction['from_'] = transaction['from']
-            processed_transaction['value'] = int(transaction['value'])
-            processed_transaction['gas'] = transaction['gas']
-            processed_transaction['gas_price'] = transaction['gasPrice']
+            processed_transaction['value'] = str(transaction['value'])
+            processed_transaction['gas'] = int(transaction['gas'])
+            processed_transaction['gas_price'] = int(transaction['gasPrice'])
 
             # processed_transaction['transaction_method'] = self.__get_transaction_method(processed_transaction)
             
