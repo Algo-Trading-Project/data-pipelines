@@ -1,6 +1,7 @@
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.models import Variable
+from time import sleep
 
 import requests as r
 import json
@@ -73,13 +74,23 @@ class Web3AlchemyToS3Operator(BaseOperator):
         return processed_transfers
 
     def __get_block_data(self):
+        from web3.exceptions import BlockNotFound
+
         start_block = int(Variable.get('start_block'))
         end_block = int(Variable.get('end_block'))
         
         transaction_batch = []
         block_batch = []
+        preprocessed_blocks = []
 
-        preprocessed_blocks = [self.web3_instance.eth.get_block(i, full_transactions = True) for i in range(start_block, end_block + 1)]
+        while True:
+            try:
+                preprocessed_blocks = [self.web3_instance.eth.get_block(i, full_transactions = True) for i in range(start_block, end_block + 1)]
+                break
+            except BlockNotFound:
+                print('One of the blocks could not be found... Sleeping for 5 minutes and trying again.')
+                sleep(60 * 5)
+                continue
         
         for block in preprocessed_blocks:
             processed_block_data = {}
