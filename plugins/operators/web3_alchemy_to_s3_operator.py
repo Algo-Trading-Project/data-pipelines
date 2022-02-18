@@ -35,31 +35,60 @@ class Web3AlchemyToS3Operator(BaseOperator):
     def __get_transfer_data(self):
         start_block = int(Variable.get('start_block'))
         end_block = int(Variable.get('end_block'))
-        params = {
-            'jsonrpc':'2.0',
-            'id':0,
-            'method':'alchemy_getAssetTransfers',
-            'params': [{
-                'fromBlock':'0x' + hex(start_block)[2:].upper(),
-                'toBlock':'0x' + hex(end_block)[2:].upper(),
-                'category': [
-                    'erc20', 'external', 'internal'
-                ]
-            }]
-        }
-        headers = {'Content-Type':'application/json'}
+        ############################################ HELPER FUNC ############################################
+        def get_transfer_data(page_key = None):
+            headers = {'Content-Type':'application/json'}
 
-        response = r.post(
-            url = Variable.get('alchemy_api_endpoint'),
-            headers = headers,
-            data = json.dumps(params)
-        )
-        
-        preprocessed_transfers = response.json()['result']['transfers']
-        print()
-        print('{} transfers found between block {} and block {}'.format(len(preprocessed_transfers), start_block, end_block))
-        print()
+            if page_key == None:
+                params = {
+                    'jsonrpc':'2.0',
+                    'id':0,
+                    'method':'alchemy_getAssetTransfers',
+                    'params': [{
+                        'fromBlock':'0x' + hex(start_block)[2:].upper(),
+                        'toBlock':'0x' + hex(end_block)[2:].upper(),
+                        'category': [
+                            'erc20', 'external', 'internal'
+                        ]
+                    }]
+                }
+            else:
+                params = {
+                    'jsonrpc':'2.0',
+                    'id':0,
+                    'method':'alchemy_getAssetTransfers',
+                    'params': [{
+                        'fromBlock':'0x' + hex(start_block)[2:].upper(),
+                        'toBlock':'0x' + hex(end_block)[2:].upper(),
+                        'category': [
+                            'erc20', 'external', 'internal'
+                        ],
+                        'pageKey':page_key
+                    }]
+                }
+
+            response = r.post(
+                url = Variable.get('alchemy_api_endpoint'),
+                headers = headers,
+                data = json.dumps(params)
+            ).json()
+
+            return response
+        ############################################ HELPER FUNC ############################################
+        pagination_key = None
+    
+        preprocessed_transfers = []
         processed_transfers = []
+
+        while True:
+            transfer_response = get_transfer_data(pagination_key)
+            preprocessed_transfers.append(transfer_response['result']['transfers'])
+
+            if transfer_response.get('result').get('pageKey') == None:
+                break
+            else:
+                pagination_key = transfer_response.get('result').get('pageKey')
+                continue
 
         for preprocessed_transfer in preprocessed_transfers:
             processed_transfer = {}
@@ -75,6 +104,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address']
 
             processed_transfers.append(processed_transfer)
+
+        print()
+        print('{} transfers found between block {} and {}'.format(len(processed_transfers), start_block, end_block))
+        print()
 
         return processed_transfers
 
@@ -97,7 +130,9 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 preprocessed_blocks = [self.web3_instance.eth.get_block(i, full_transactions = True) for i in range(start_block, end_block + 1)]
                 break
             except BlockNotFound:
+                print()
                 print('One of the blocks could not be found... Sleeping for 5 minutes and trying again.')
+                print()
                 sleep(60 * 5)
                 continue
                 
