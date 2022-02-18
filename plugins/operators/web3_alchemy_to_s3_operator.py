@@ -35,7 +35,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
     def __get_transfer_data(self):
         start_block = int(Variable.get('start_block'))
         end_block = int(Variable.get('end_block'))
-        ############################################ HELPER FUNC ############################################
+        ############################################ INTERNAL FUNC ############################################
         def get_transfer_data(page_key = None):
             headers = {'Content-Type':'application/json'}
 
@@ -74,7 +74,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
             ).json()
 
             return response
-        ############################################ HELPER FUNC ############################################
+        ############################################ INTERNAL FUNC END ########################################
         pagination_key = None
     
         preprocessed_transfers = []
@@ -82,7 +82,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         while True:
             transfer_response = get_transfer_data(pagination_key)
-            preprocessed_transfers.append(transfer_response['result']['transfers'])
+            preprocessed_transfers.extend(transfer_response['result']['transfers'])
 
             if transfer_response.get('result').get('pageKey') == None:
                 break
