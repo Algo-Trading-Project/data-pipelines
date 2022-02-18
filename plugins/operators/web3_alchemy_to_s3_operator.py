@@ -33,13 +33,15 @@ class Web3AlchemyToS3Operator(BaseOperator):
         )
 
     def __get_transfer_data(self):
+        start_block = int(Variable.get('start_block'))
+        end_block = int(Variable.get('end_block'))
         params = {
             'jsonrpc':'2.0',
             'id':0,
             'method':'alchemy_getAssetTransfers',
             'params': [{
-                'fromBlock':'0x' + hex(int(Variable.get('start_block')))[2:].upper(),
-                'toBlock':'0x' + hex(int(Variable.get('end_block')))[2:].upper(),
+                'fromBlock':'0x' + hex(start_block)[2:].upper(),
+                'toBlock':'0x' + hex(end_block)[2:].upper(),
                 'category': [
                     'erc20', 'external', 'internal'
                 ]
@@ -54,6 +56,9 @@ class Web3AlchemyToS3Operator(BaseOperator):
         )
         
         preprocessed_transfers = response.json()['result']['transfers']
+        print()
+        print('{} transfers found between block {} and block {}'.format(len(preprocessed_transfers, start_block, end_block)))
+        print()
         processed_transfers = []
 
         for preprocessed_transfer in preprocessed_transfers:
@@ -78,6 +83,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         start_block = int(Variable.get('start_block'))
         end_block = int(Variable.get('end_block'))
+
+        print()
+        print('fetching data between blocks {} and {} ({} total)'.format(start_block, end_block, end_block - start_block))
+        print()
         
         transaction_batch = []
         block_batch = []
@@ -91,7 +100,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 print('One of the blocks could not be found... Sleeping for 5 minutes and trying again.')
                 sleep(60 * 5)
                 continue
-        
+                
         for block in preprocessed_blocks:
             processed_block_data = {}
             
@@ -131,8 +140,15 @@ class Web3AlchemyToS3Operator(BaseOperator):
         preprocessed_transactions = []
         processed_transactions = []
 
+        start_block = int(Variable.get('start_block'))
+        end_block = int(Variable.get('end_block'))
+
         for transaction in transaction_batch:
             preprocessed_transactions.extend(transaction)
+
+        print()
+        print('{} transactions found between block {} and {}'.format(len(preprocessed_transactions), start_block, end_block))
+        print()
 
         for transaction in preprocessed_transactions:
             processed_transaction = {}
