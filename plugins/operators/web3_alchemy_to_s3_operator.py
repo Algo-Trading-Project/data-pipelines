@@ -199,5 +199,5 @@ class Web3AlchemyToS3Operator(BaseOperator):
         Variable.set(key = 'end_block', value = new_end_block)
 
         print()
-        print('new start block: {}'.foramt(new_start_block))
-        print('new end block: {}'.foramt(new_end_block))
+        print('new start block: {}'.format(new_start_block))
+        print('new end block: {}'.format(new_end_block))
