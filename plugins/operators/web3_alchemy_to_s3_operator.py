@@ -57,7 +57,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         
         preprocessed_transfers = response.json()['result']['transfers']
         print()
-        print('{} transfers found between block {} and block {}'.format(len(preprocessed_transfers, start_block, end_block)))
+        print('{} transfers found between block {} and block {}'.format(len(preprocessed_transfers), start_block, end_block))
         print()
         processed_transfers = []
 
