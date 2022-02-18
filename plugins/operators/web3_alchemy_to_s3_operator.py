@@ -82,6 +82,13 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         while True:
             transfer_response = get_transfer_data(pagination_key)
+            error = transfer_response.get('error')
+
+            if error != None and error.get('code') == -32604:
+                print('one of the api calls to get transfer data timed out... sleeping for 5 minutes and trying again.')
+                sleep(60 * 5)
+                continue
+
             preprocessed_transfers.extend(transfer_response['result']['transfers'])
 
             if transfer_response.get('result').get('pageKey') == None:
