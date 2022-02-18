@@ -1,13 +1,16 @@
 from airflow import DAG
 from airflow.models import Variable
+from pendulum import now
 
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
-import datetime
-from airflow.api.client.local_client import Client
+from datetime import timedelta, datetime
 
-with DAG('test', start_date = datetime.datetime.now(), schedule_interval = None) as dag:
+
+schedule_interval = timedelta(minutes = 5)
+
+with DAG('test', start_date = datetime.now(), schedule_interval = schedule_interval) as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
         batch_size = 1000,
@@ -24,6 +27,8 @@ with DAG('test', start_date = datetime.datetime.now(), schedule_interval = None)
         task_id = 's3_block_data_to_redshift',
         schema = 'eth_data',
         table = 'block',
+        method = 'UPSERT',
+        upsert_keys = ['block_no'],
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/blocks.json',
         redshift_conn_id = 'redshift_conn',
@@ -38,6 +43,8 @@ with DAG('test', start_date = datetime.datetime.now(), schedule_interval = None)
         task_id = 's3_transaction_data_to_redshift',
         schema = 'eth_data',
         table = 'transaction',
+        method = 'UPSERT',
+        upsert_keys = ['transaction_hash'],
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/transactions.json',
         redshift_conn_id = 'redshift_conn',

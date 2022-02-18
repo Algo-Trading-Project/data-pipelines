@@ -178,7 +178,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         end_block = int(Variable.get('end_block'))
         new_start_block = end_block + 1
-        new_end_block = end_block + 100
+        new_end_block = end_block + 1000
 
         Variable.set(key = 'start_block', value = new_start_block)
         Variable.set(key = 'end_block', value = new_end_block)
