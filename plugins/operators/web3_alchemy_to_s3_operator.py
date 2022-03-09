@@ -8,7 +8,7 @@ import json
 
 class Web3AlchemyToS3Operator(BaseOperator):
 
-    def __init__(self, batch_size, node_endpoint, bucket_name, region_name, key, *args, **kwargs):
+    def __init__(self, batch_size, node_endpoint, bucket_name, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.batch_size = batch_size
@@ -17,8 +17,6 @@ class Web3AlchemyToS3Operator(BaseOperator):
         self.web3_instance = None
 
         self.bucket_name = bucket_name
-        self.region_name = region_name
-        self.key = key
         self.s3_connection = None
 
     ############################ HELPER FUNCTIONS ##########################################
@@ -251,7 +249,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         end_block = int(Variable.get('end_block'))
         
-        new_start_block = min(end_block + 1, self.web3_instance.eth.block_number)
+        new_start_block = min(self.web3_instance.eth.block_number, end_block + 1)
         new_end_block = min(self.web3_instance.eth.block_number, new_start_block + self.batch_size)
 
         Variable.set(key = 'start_block', value = new_start_block)

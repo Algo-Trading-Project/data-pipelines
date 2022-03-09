@@ -15,16 +15,14 @@ with DAG('test', start_date = start_date, schedule_interval = schedule_interval)
         task_id = 'get_eth_data',
         batch_size = 1000,
         node_endpoint = Variable.get('infura_endpoint'),
-        bucket_name = 'project-poseidon-data',
-        region_name = 'us-west-2',
-        key = 'eth_data/blocks'
+        bucket_name = 'project-poseidon-data'
     )     
 
     block_table_cols = ['block_no', 'hash', 'parent_hash', 'timestamp',
                         'difficulty', 'miner', 'gas_used',
                         'size', 'sha3_uncles', 'gas_limit']
     s3_block_data_to_redshift = S3ToRedshiftOperator(
-        task_id = 's3_block_data_to_redshift',
+        task_id = 's3_eth_block_data_to_redshift',
         schema = 'eth_data',
         table = 'block',
         method = 'UPSERT',
@@ -40,7 +38,7 @@ with DAG('test', start_date = start_date, schedule_interval = schedule_interval)
     transaction_table_cols = ['transaction_hash', 'block_no', 'to_',
                               'from_', 'value', 'gas', 'gas_price']
     s3_transaction_data_to_redshift = S3ToRedshiftOperator(
-        task_id = 's3_transaction_data_to_redshift',
+        task_id = 's3_eth_transaction_data_to_redshift',
         schema = 'eth_data',
         table = 'transaction',
         method = 'UPSERT',
@@ -57,7 +55,7 @@ with DAG('test', start_date = start_date, schedule_interval = schedule_interval)
                                  'to_', 'token_units', 'raw_token_units',
                                  'asset', 'category', 'token_address']
     s3_transfer_data_to_redshift = S3ToRedshiftOperator(
-        task_id = 's3_transfer_data_to_redshift',
+        task_id = 's3_eth_transfer_data_to_redshift',
         schema = 'eth_data',
         table = 'transfer_event',
         s3_bucket = 'project-poseidon-data',
