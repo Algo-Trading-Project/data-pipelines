@@ -3,12 +3,12 @@ from airflow.models import Variable
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
-from datetime import timedelta, datetime
-import pytz
+from datetime import timedelta
+import pendulum
 
 # timezone = pytz.timezone('America/Los_Angeles')
 schedule_interval = timedelta(minutes = 15)
-start_date = datetime(year = 2022, month = 3, day = 9, hour = 3)
+start_date = pendulum.datetime(year = 2022, month = 3, day = 9, hour = 7, tz = 'America/Los_Angeles')
 
 with DAG('get_eth_block_and_transaction_data', start_date = start_date, schedule_interval = schedule_interval) as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
