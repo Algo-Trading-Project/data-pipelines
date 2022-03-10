@@ -6,9 +6,9 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 from datetime import timedelta, datetime
 import pytz
 
-timezone = pytz.timezone('America/Los_Angeles')
+# timezone = pytz.timezone('America/Los_Angeles')
 schedule_interval = timedelta(minutes = 15)
-start_date = timezone.localize(datetime(year = 2022, month = 3, day = 9, hour = 3))
+start_date = datetime(year = 2022, month = 3, day = 9, hour = 3)
 
 with DAG('get_eth_block_and_transaction_data', start_date = start_date, schedule_interval = schedule_interval) as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
