@@ -252,7 +252,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         end_block = int(Variable.get('end_block'))
         
         new_start_block = min(self.web3_instance.eth.block_number, end_block + 1)
-        new_end_block = min(self.web3_instance.eth.block_number, new_start_block + self.batch_size)
+        new_end_block = new_start_block + self.batch_size
 
         Variable.set(key = 'start_block', value = new_start_block)
         Variable.set(key = 'end_block', value = new_end_block)
