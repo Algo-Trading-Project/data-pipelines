@@ -13,7 +13,7 @@ start_date = pendulum.datetime(year = 2022, month = 3, day = 9, hour = 19, tz = 
 with DAG('get_eth_block_and_transaction_data', start_date = start_date, schedule_interval = schedule_interval) as dag:
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
-        batch_size = 500,
+        batch_size = 300,
         node_endpoint = Variable.get('infura_endpoint'),
         bucket_name = 'project-poseidon-data',
         key = '',
@@ -59,7 +59,7 @@ with DAG('get_eth_block_and_transaction_data', start_date = start_date, schedule
     s3_transfer_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_transfer_data_to_redshift',
         schema = 'eth_data',
-        table = 'transfer_event',
+        table = 'transfer',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/transfers.json',
         redshift_conn_id = 'redshift_conn',

@@ -197,7 +197,9 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transaction['block_no'] = int(transaction['blockNumber'])
             processed_transaction['to_'] = transaction['to']
             processed_transaction['from_'] = transaction['from']
-            processed_transaction['value'] = str(transaction['value'])
+            # value is converted from wei to ether units before being stored to
+            # prevent too large of a number from being stored
+            processed_transaction['value'] = int(transaction['value']) / (10 ** 18)
             processed_transaction['gas'] = int(transaction['gas'])
             processed_transaction['gas_price'] = int(transaction['gasPrice'])
 
