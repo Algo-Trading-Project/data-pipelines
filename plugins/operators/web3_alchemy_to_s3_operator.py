@@ -105,7 +105,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transfer['token_units'] = str(preprocessed_transfer['value'])
             processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'])
             processed_transfer['asset'] = preprocessed_transfer['asset']
-            processed_transfer['category'] = preprocessed_transfer['category']
+            processed_transfer['transfer_category'] = preprocessed_transfer['category']
             processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address']
 
             processed_transfers.append(processed_transfer)
@@ -145,13 +145,13 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_block_data = {}
             
             processed_block_data['block_no'] = int(block['number'])
-            processed_block_data['hash'] = block['hash'].hex()
+            processed_block_data['block_hash'] = block['hash'].hex()
             processed_block_data['parent_hash'] = block['parentHash'].hex()
             processed_block_data['timestamp'] = int(block['timestamp'])
             processed_block_data['difficulty'] = int(block['difficulty'])
-            processed_block_data['miner'] = block['miner']
+            processed_block_data['miner_address'] = block['miner']
             processed_block_data['gas_used'] = int(block['gasUsed'])
-            processed_block_data['size'] = int(block['size'])
+            processed_block_data['block_size'] = int(block['size'])
             processed_block_data['sha3_uncles'] = block['sha3Uncles'].hex()
             processed_block_data['gas_limit'] = int(block['gasLimit'])
 
