@@ -19,7 +19,7 @@ with DAG('get_eth_block_and_transaction_data',
         batch_size = 300,
         node_endpoint = Variable.get('infura_endpoint'),
         bucket_name = 'project-poseidon-data',
-        key = '',
+        key = 'eth_data',
         region_name = 'us-west-2'
     )     
 
