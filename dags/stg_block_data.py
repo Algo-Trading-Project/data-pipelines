@@ -16,7 +16,7 @@ with DAG('get_eth_block_and_transaction_data',
 
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
-        batch_size = None,
+        batch_size = 300,
         node_endpoint = Variable.get('infura_endpoint'),
         bucket_name = 'project-poseidon-data',
         key = '',
