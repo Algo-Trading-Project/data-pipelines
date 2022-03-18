@@ -8,8 +8,8 @@ import json
 
 class Web3AlchemyToS3Operator(BaseOperator):
 
-    def __init__(self, batch_size, node_endpoint, bucket_name, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, batch_size, node_endpoint, bucket_name):
+        super().__init__()
 
         self.batch_size = batch_size
 

@@ -18,9 +18,7 @@ with DAG('get_eth_block_and_transaction_data',
         task_id = 'get_eth_data',
         batch_size = 300,
         node_endpoint = Variable.get('infura_endpoint'),
-        bucket_name = 'project-poseidon-data',
-        key = 'eth_data',
-        region_name = 'us-west-2'
+        bucket_name = 'project-poseidon-data'
     )     
 
     block_table_cols = ['block_no', 'block_hash', 'parent_hash', 'timestamp',
