@@ -10,19 +10,22 @@ import pendulum
 schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022, month = 3, day = 11, hour = 10, tz = 'America/Los_Angeles')
 
-with DAG('get_eth_block_and_transaction_data', start_date = start_date, schedule_interval = schedule_interval) as dag:
+with DAG('get_eth_block_and_transaction_data',
+          start_date = start_date, 
+          schedule_interval = schedule_interval) as dag:
+          
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
-        batch_size = 300,
+        batch_size = None,
         node_endpoint = Variable.get('infura_endpoint'),
         bucket_name = 'project-poseidon-data',
         key = '',
         region_name = 'us-west-2'
     )     
 
-    block_table_cols = ['block_no', 'hash', 'parent_hash', 'timestamp',
-                        'difficulty', 'miner', 'gas_used',
-                        'size', 'sha3_uncles', 'gas_limit']
+    block_table_cols = ['block_no', 'block_hash', 'parent_hash', 'timestamp',
+                        'difficulty', 'miner_address', 'gas_used',
+                        'block_size', 'sha3_uncles', 'gas_limit']
     s3_block_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_block_data_to_redshift',
         schema = 'eth_data',
@@ -55,7 +58,7 @@ with DAG('get_eth_block_and_transaction_data', start_date = start_date, schedule
 
     transfer_event_table_cols = ['transaction_hash', 'block_no', 'from_',
                                  'to_', 'token_units', 'raw_token_units',
-                                 'asset', 'category', 'token_address']
+                                 'asset', 'transfer_category', 'token_address']
     s3_transfer_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_transfer_data_to_redshift',
         schema = 'eth_data',
