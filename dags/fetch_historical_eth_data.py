@@ -7,7 +7,7 @@ from datetime import timedelta
 import pendulum
 
 schedule_interval = timedelta(minutes = 15)
-start_date = pendulum.datetime(year = 2022, month = 3, day = 18, hour = 14, tz = 'America/Los_Angeles')
+start_date = pendulum.datetime(year = 2022, month = 3, day = 18, hour = 15, tz = 'America/Los_Angeles')
 
 with DAG('fetch_historical_eth_data',
           start_date = start_date, 
