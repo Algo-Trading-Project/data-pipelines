@@ -8,10 +8,11 @@ import json
 
 class Web3AlchemyToS3Operator(BaseOperator):
 
-    def __init__(self, batch_size, node_endpoint, bucket_name, **kwargs):
+    def __init__(self, batch_size, node_endpoint, bucket_name, is_historical_run, **kwargs):
         super().__init__(**kwargs)
 
         self.batch_size = batch_size
+        self.is_historical_run = is_historical_run
 
         self.node_endpoint = node_endpoint
         self.web3_instance = None
@@ -20,6 +21,16 @@ class Web3AlchemyToS3Operator(BaseOperator):
         self.s3_connection = None
 
     ############################ HELPER FUNCTIONS ##########################################
+    def __get_start_and_end_block(self):
+        if self.is_historical_run:
+            start_block = int(Variable.get('start_block_historical'))
+            end_block = int(Variable.get('end_block_historical'))
+        else:
+            start_block = int(Variable.get('start_block'))
+            end_block = int(Variable.get('end_block'))
+        
+        return start_block, end_block
+
     def __set_up_connections(self):
         from web3 import Web3
         
@@ -31,8 +42,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         )
 
     def __get_transfer_data(self):
-        start_block = int(Variable.get('start_block'))
-        end_block = int(Variable.get('end_block'))
+        start_block, end_block = self.__get_start_and_end_block()
         ############################################ INTERNAL FUNC ############################################
         def get_transfer_data(page_key = None):
             headers = {'Content-Type':'application/json'}
@@ -119,11 +129,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
     def __get_block_data(self):
         from web3.exceptions import BlockNotFound
 
-        start_block = int(Variable.get('start_block'))
-        end_block = int(Variable.get('end_block'))
+        start_block, end_block = self.__get_start_and_end_block()
 
         print()
-        print('fetching data between blocks {} and {} ({} total)'.format(start_block, end_block, end_block - start_block))
+        print('fetching data between blocks {} and {} ({} total)'.format(start_block, end_block, end_block - start_block + 1))
         print()
         
         transaction_batch = []
@@ -180,8 +189,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         preprocessed_transactions = []
         processed_transactions = []
 
-        start_block = int(Variable.get('start_block'))
-        end_block = int(Variable.get('end_block'))
+        start_block, end_block = self.__get_start_and_end_block()
 
         for transaction in transaction_batch:
             preprocessed_transactions.extend(transaction)
@@ -210,10 +218,15 @@ class Web3AlchemyToS3Operator(BaseOperator):
         return processed_transactions
 
     def __upload_to_s3(self, block_data, transaction_data, transfer_data):
+        if self.is_historical_run:
+            dest_folder = 'eth_data_historical'
+        else:
+            dest_folder = 'eth_data'
+
         json_block_data = json.dumps(block_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
             json_block_data,
-            key = 'eth_data/blocks.json',
+            key = '{}/blocks.json'.format(dest_folder),
             bucket_name = self.bucket_name,
             replace = True
         )
@@ -221,7 +234,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         json_transaction_data = json.dumps(transaction_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
             json_transaction_data,
-            key = 'eth_data/transactions.json',
+            key = '{}/transactions.json'.format(dest_folder),
             bucket_name = self.bucket_name,
             replace = True
         )
@@ -229,7 +242,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         json_transfer_data = json.dumps(transfer_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
             json_transfer_data,
-            key = 'eth_data/transfers.json',
+            key = '{}/transfers.json'.format(dest_folder),
             bucket_name = self.bucket_name,
             replace = True
         )
@@ -237,25 +250,31 @@ class Web3AlchemyToS3Operator(BaseOperator):
     ############################ HELPER FUNCTIONS END ######################################
 
     def execute(self, context):
-        print()
-        print('start block: {}'.format(Variable.get(key = 'start_block')))
-        print('end block: {}'.format(Variable.get(key = 'end_block')))
-        print()
         self.__set_up_connections()
+
+        start_block = Variable.get('start_block_historical') if self.is_historical_run else Variable.get('start_block')
+        end_block = Variable.get('end_block_historical') if self.is_historical_run else Variable.get('end_block')
+
+        print()
+        print('start block: {}'.format(start_block))
+        print('end block: {}'.format(end_block))
+        print()
        
         block_data, transaction_batch = self.__get_block_data()
         transaction_data = self.__get_transaction_data(transaction_batch)
         transfer_data = self.__get_transfer_data()
         
         self.__upload_to_s3(block_data, transaction_data, transfer_data)
-
-        end_block = int(Variable.get('end_block'))
         
         new_start_block = min(self.web3_instance.eth.block_number, end_block + 1)
         new_end_block = min(self.web3_instance.eth.block_number, new_start_block + self.batch_size)
 
-        Variable.set(key = 'start_block', value = new_start_block)
-        Variable.set(key = 'end_block', value = new_end_block)
+        if self.is_historical_run:
+            Variable.set(key = 'start_block_historical', value = new_start_block)
+            Variable.set(key = 'end_block_historical', value = new_end_block)
+        else:
+            Variable.set(key = 'start_block', value = new_start_block)
+            Variable.set(key = 'end_block', value = new_end_block)
 
         print()
         print('new start block: {}'.format(new_start_block))
