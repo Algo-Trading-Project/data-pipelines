@@ -252,8 +252,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
     def execute(self, context):
         self.__set_up_connections()
 
-        start_block = Variable.get('start_block_historical') if self.is_historical_run else Variable.get('start_block')
-        end_block = Variable.get('end_block_historical') if self.is_historical_run else Variable.get('end_block')
+        start_block = int(Variable.get('start_block_historical')) if self.is_historical_run else int(Variable.get('start_block'))
+        end_block = int(Variable.get('end_block_historical')) if self.is_historical_run else int(Variable.get('end_block'))
 
         print()
         print('start block: {}'.format(start_block))
