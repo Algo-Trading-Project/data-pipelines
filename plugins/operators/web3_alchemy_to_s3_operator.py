@@ -169,22 +169,6 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         return block_batch, transaction_batch
 
-    def __get_transaction_method(self, transaction):
-        if self.web3_instance.eth.get_code(transaction['to']) == '0x':
-            return 'Transfer'
-
-        tx = self.web3_instance.eth.get_transaction(transaction['transaction_hash'])
-        etherscan_api_key = Variable.get('etherscan_api_key')
-        abi_endpoint = "https://api.etherscan.io/api?module=contract&action=getabi&address={}&apikey={}".format(transaction['to'], etherscan_api_key)
-        
-        abi = json.loads(r.get(abi_endpoint).text)
-        try:
-            contract = self.web3_instance.eth.contract(address = transaction['to'], abi = abi["result"])
-            func_obj, func_params = contract.decode_function_input(tx["input"])
-            return func_obj.functions.name().call()
-        except Exception as e:
-            return None
-
     def __get_transaction_data(self, transaction_batch):
         preprocessed_transactions = []
         processed_transactions = []
@@ -210,8 +194,6 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_transaction['value'] = int(transaction['value']) / (10 ** 18)
             processed_transaction['gas'] = int(transaction['gas'])
             processed_transaction['gas_price'] = int(transaction['gasPrice'])
-
-            # processed_transaction['transaction_method'] = self.__get_transaction_method(processed_transaction)
             
             processed_transactions.append(processed_transaction)
             
