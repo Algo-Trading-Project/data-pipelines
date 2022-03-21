@@ -15,7 +15,7 @@ with DAG('fetch_historical_eth_data',
 
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_historical_eth_data',
-        batch_size = 10000,
+        batch_size = 2000,
         node_endpoint = Variable.get('infura_endpoint'),
         bucket_name = 'project-poseidon-data',
         is_historical_run = True
