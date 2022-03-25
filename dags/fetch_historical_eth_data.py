@@ -17,10 +17,10 @@ batch_size_map = {1:2000, 2:2000, 3:1000, 4:500}
 
 for i in range(1, 5):
     dag_id = 'fetch_historical_eth_data_{}'.format(i)
-    with DAG(dag_id,
-            start_date = start_date, 
-            schedule_interval = schedule_interval) as dag:
-
+    dag = DAG(dag_id,
+              start_date = start_date, 
+              schedule_interval = schedule_interval)
+    with dag:
         eth_data_to_s3 = Web3AlchemyToS3Operator(
             task_id = 'get_historical_eth_data',
             batch_size = batch_size_map[i],
@@ -82,3 +82,5 @@ for i in range(1, 5):
         )
 
         eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift]
+    
+    globals()[dag_id] = dag
