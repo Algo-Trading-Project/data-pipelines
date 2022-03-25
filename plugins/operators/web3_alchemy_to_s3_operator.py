@@ -1,3 +1,4 @@
+from tracemalloc import start
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.models import Variable
@@ -8,7 +9,9 @@ import json
 
 class Web3AlchemyToS3Operator(BaseOperator):
 
-    def __init__(self, batch_size, node_endpoint, bucket_name, is_historical_run, **kwargs):
+    def __init__(self, batch_size, node_endpoint,
+                 bucket_name, is_historical_run, start_block_variable_name,
+                 end_block_variable_name, **kwargs):
         super().__init__(**kwargs)
 
         self.batch_size = batch_size
@@ -20,15 +23,14 @@ class Web3AlchemyToS3Operator(BaseOperator):
         self.bucket_name = bucket_name
         self.s3_connection = None
 
+        self.start_block_variable_name = start_block_variable_name
+        self.end_block_variable_name = end_block_variable_name
+
     ############################ HELPER FUNCTIONS ##########################################
     def __get_start_and_end_block(self):
-        if self.is_historical_run:
-            start_block = int(Variable.get('start_block_historical'))
-            end_block = int(Variable.get('end_block_historical'))
-        else:
-            start_block = int(Variable.get('start_block'))
-            end_block = int(Variable.get('end_block'))
-        
+        start_block = int(Variable(self.start_block_variable_name))
+        end_block = int(Variable(self.end_block_variable_name))
+
         return start_block, end_block
 
     def __set_up_connections(self):
@@ -201,10 +203,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
     def __upload_to_s3(self, block_data, transaction_data, transfer_data):
         if self.is_historical_run:
-            dest_folder = 'eth_data_historical'
+            dest_folder = 'eth_data_historical/' + self.start_block_variable_name + '-' + self.end_block_variable_name
         else:
             dest_folder = 'eth_data'
-
+            
         json_block_data = json.dumps(block_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
             json_block_data,
@@ -234,9 +236,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
     def execute(self, context):
         self.__set_up_connections()
 
-        start_block = int(Variable.get('start_block_historical')) if self.is_historical_run else int(Variable.get('start_block'))
-        end_block = int(Variable.get('end_block_historical')) if self.is_historical_run else int(Variable.get('end_block'))
-
+        start_block, end_block = self.__get_start_and_end_block()
+        
         print()
         print('start block: {}'.format(start_block))
         print('end block: {}'.format(end_block))
@@ -251,12 +252,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
         new_start_block = min(self.web3_instance.eth.block_number, end_block + 1)
         new_end_block = min(self.web3_instance.eth.block_number, new_start_block + self.batch_size)
 
-        if self.is_historical_run:
-            Variable.set(key = 'start_block_historical', value = new_start_block)
-            Variable.set(key = 'end_block_historical', value = new_end_block)
-        else:
-            Variable.set(key = 'start_block', value = new_start_block)
-            Variable.set(key = 'end_block', value = new_end_block)
+        Variable.set(key = self.start_block_variable_name, value = new_start_block)
+        Variable.set(key = self.end_block_variable_name, value = new_end_block)
 
         print()
         print('new start block: {}'.format(new_start_block))
