@@ -29,6 +29,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
     ############################ HELPER FUNCTIONS ##########################################
     def __get_start_and_end_block(self):
         print('var', Variable(self.start_block_variable_name))
+        print(type(Variable(self.start_block_variable_name)))
         start_block = str(Variable(self.start_block_variable_name))
         start_block = int(start_block)
         end_block = str(Variable(self.end_block_variable_name))
