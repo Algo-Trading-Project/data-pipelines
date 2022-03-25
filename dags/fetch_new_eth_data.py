@@ -24,7 +24,9 @@ with DAG('fetch_new_eth_data',
         batch_size = 300,
         node_endpoint = Variable.get('infura_endpoint'),
         bucket_name = 'project-poseidon-data',
-        is_historical_run = False
+        is_historical_run = False,
+        start_block_variable_name = 'start_block',
+        end_block_variable_name = 'end_block'
     )     
 
     block_table_cols = ['block_no', 'block_hash', 'parent_hash', 'timestamp',
