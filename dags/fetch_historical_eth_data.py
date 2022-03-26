@@ -65,7 +65,7 @@ for i in range(1, 5):
             poke_interval = 60,
             timeout = 60 * 60,
             allowed_states = [State.SUCCESS, State.NONE],
-            execution_delta = timedelta(minutes = 25)
+            execution_delta = timedelta(minutes = 15)
         )
 
         eth_data_to_s3 = Web3AlchemyToS3Operator(
