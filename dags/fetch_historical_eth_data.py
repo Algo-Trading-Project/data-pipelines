@@ -21,6 +21,13 @@ def update_start_and_end_block(i, end_block):
     new_start_block = None
     new_end_block = None
 
+    start_block = int(Variable.get('start_block_{}'.format(i)))
+   
+    print()
+    print('start block: {}'.format(start_block))
+    print('end block: {}'.format(end_block))
+    print()
+
     if i == 1:
         new_start_block = min(end_block + 1, 3750000)
         new_end_block = min(new_start_block + 2000, 3750000)
