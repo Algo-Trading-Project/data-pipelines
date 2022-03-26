@@ -13,7 +13,7 @@ start_date = pendulum.datetime(year = 2022,
                                hour = 5,
                                tz = 'America/Los_Angeles')
 
-batch_size_map = {1:2000, 2:2000, 3:1000, 4:500}
+batch_size_map = {1:2000, 2:2000, 3:2000, 4:2000}
 
 for i in range(1, 5):
     dag_id = 'fetch_historical_eth_data_{}'.format(i)
