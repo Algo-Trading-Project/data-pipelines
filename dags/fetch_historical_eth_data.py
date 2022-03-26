@@ -65,7 +65,6 @@ for i in range(1, 5):
             poke_interval = 60,
             timeout = 60 * 60,
             allowed_states = [State.SUCCESS, State.NONE],
-            failed_states = [State.FAILED, State.RUNNING, State.QUEUED],
             execution_delta = schedule_interval
         )
 
