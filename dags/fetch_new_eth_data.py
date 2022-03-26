@@ -10,8 +10,8 @@ import pendulum
 schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 3,
-                               day = 25,
-                               hour = 19,
+                               day = 26,
+                               hour = 5,
                                tz = 'America/Los_Angeles')
 
 with DAG('fetch_new_eth_data',
