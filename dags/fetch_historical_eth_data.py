@@ -2,6 +2,9 @@ from airflow import DAG
 from airflow.models import Variable
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
+from airflow.sensors.external_task_sensor import ExternalTaskSensor
+from airflow.utils.state import State
+from airflow.operators.dummy import DummyOperator
 
 from datetime import timedelta
 import pendulum
@@ -21,6 +24,15 @@ for i in range(1, 5):
               start_date = start_date, 
               schedule_interval = schedule_interval)
     with dag:
+        previous_dag_run_sensor = ExternalTaskSensor(
+            task_id = 'check_previous_dag_run_finished',
+            external_dag_id = dag_id,
+            external_task_id = 'dag_run_finished',
+            allowed_states = [State.SUCCESS],
+            failed_states = [State.FAILED],
+            execution_delta = schedule_interval
+        )
+
         eth_data_to_s3 = Web3AlchemyToS3Operator(
             task_id = 'get_historical_eth_data',
             batch_size = batch_size_map[i],
@@ -81,6 +93,11 @@ for i in range(1, 5):
             copy_options = ["json 'auto'"]
         )
 
-        eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift]
+        finish = DummyOperator(
+            task_id = 'dag_run_finished'
+        )
+
+        previous_dag_run_sensor >> eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift] >> finish
     
     globals()[dag_id] = dag
+    
