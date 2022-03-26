@@ -13,8 +13,7 @@ schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 3,
                                day = 26,
-                               hour = 12,
-                               minute = 20,
+                               hour = 13,
                                tz = 'America/Los_Angeles')
 
 def update_start_and_end_block(i, end_block):
