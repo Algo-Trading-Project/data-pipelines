@@ -10,7 +10,7 @@ schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 3,
                                day = 25,
-                               hour = 13,
+                               hour = 19,
                                tz = 'America/Los_Angeles')
 
 batch_size_map = {1:2000, 2:2000, 3:1000, 4:500}
