@@ -62,6 +62,8 @@ for i in range(1, 5):
             task_id = 'check_previous_dag_run_finished',
             external_dag_id = dag_id,
             external_task_id = 'dag_run_finished',
+            poke_interval = 60,
+            timeout = 60 * 60,
             allowed_states = [State.SUCCESS, State.NONE],
             failed_states = [State.FAILED, State.RUNNING, State.QUEUED],
             execution_delta = schedule_interval
