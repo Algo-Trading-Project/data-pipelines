@@ -30,7 +30,7 @@ for i in range(1, 5):
             external_dag_id = dag_id,
             external_task_id = 'dag_run_finished',
             allowed_states = [State.SUCCESS, State.NONE],
-            failed_states = [State.FAILED],
+            failed_states = [State.FAILED, State.RUNNING, State.QUEUED],
             execution_delta = schedule_interval
         )
 
