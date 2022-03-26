@@ -4,7 +4,7 @@ from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
 from airflow.utils.state import State
-from airflow.operators.dummy import DummyOperator
+from airflow.operators.python import PythonOperator
 
 from datetime import timedelta
 import pendulum
@@ -13,17 +13,44 @@ schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 3,
                                day = 26,
-                               hour = 10,
+                               hour = 11,
                                minute = 30,
                                tz = 'America/Los_Angeles')
 
-batch_size_map = {1:2000, 2:2000, 3:2000, 4:2000}
+def update_start_and_end_block(i, end_block):
+    new_start_block = None
+    new_end_block = None
+
+    if i == 1:
+        new_start_block = min(end_block + 1, 3750000)
+        new_end_block = min(new_start_block + 2000, 3750000)
+
+    elif i == 2:
+        new_start_block = min(end_block + 1, 7500000)
+        new_end_block = min(new_start_block + 2000, 7500000)
+
+    elif i == 3:
+        new_start_block = min(end_block + 1, 11250000)
+        new_end_block = min(new_start_block + 2000, 11250000)
+
+    elif i == 4:
+        new_start_block = min(end_block + 1, 14450000)
+        new_end_block = min(new_start_block + 2000, 14450000)
+
+    Variable.set(key = 'start_block_{}'.format(i), value = new_start_block)
+    Variable.set(key = 'end_block_{}'.format(i), value = new_end_block)
+
+    print()
+    print('new start block: {}'.format(new_start_block))
+    print('new end block: {}'.format(new_end_block))
+    print()
 
 for i in range(1, 5):
     dag_id = 'fetch_historical_eth_data_{}'.format(i)
     dag = DAG(dag_id,
               start_date = start_date, 
               schedule_interval = schedule_interval)
+
     with dag:
         previous_dag_run_sensor = ExternalTaskSensor(
             task_id = 'check_previous_dag_run_finished',
@@ -36,7 +63,7 @@ for i in range(1, 5):
 
         eth_data_to_s3 = Web3AlchemyToS3Operator(
             task_id = 'get_historical_eth_data',
-            batch_size = batch_size_map[i],
+            batch_size = 2000,
             node_endpoint = Variable.get('infura_endpoint'),
             bucket_name = 'project-poseidon-data',
             is_historical_run = True,
@@ -94,8 +121,10 @@ for i in range(1, 5):
             copy_options = ["json 'auto'"]
         )
 
-        finish = DummyOperator(
-            task_id = 'dag_run_finished'
+        finish = PythonOperator(
+            task_id = 'dag_run_finished',
+            python_callable = update_start_and_end_block,
+            op_args = [i, Variable.get('end_block_{}'.format(i))]
         )
 
         previous_dag_run_sensor >> eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift] >> finish

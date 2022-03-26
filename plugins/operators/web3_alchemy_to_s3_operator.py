@@ -234,9 +234,12 @@ class Web3AlchemyToS3Operator(BaseOperator):
     ############################ HELPER FUNCTIONS END ######################################
 
     def execute(self, context):
-        self.__set_up_connections()
-
         start_block, end_block = self.__get_start_and_end_block()
+
+        if start_block == end_block:
+            raise Exception('Got data for every block in assigned interval')
+
+        self.__set_up_connections()
         
         print()
         print('start block: {}'.format(start_block))
@@ -248,13 +251,3 @@ class Web3AlchemyToS3Operator(BaseOperator):
         transfer_data = self.__get_transfer_data()
         
         self.__upload_to_s3(block_data, transaction_data, transfer_data)
-        
-        new_start_block = min(self.web3_instance.eth.block_number, end_block + 1)
-        new_end_block = min(self.web3_instance.eth.block_number, new_start_block + self.batch_size)
-
-        Variable.set(key = self.start_block_variable_name, value = new_start_block)
-        Variable.set(key = self.end_block_variable_name, value = new_end_block)
-
-        print()
-        print('new start block: {}'.format(new_start_block))
-        print('new end block: {}'.format(new_end_block))
