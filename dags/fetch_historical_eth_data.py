@@ -1,10 +1,13 @@
 from airflow import DAG
 from airflow.models import Variable
+
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
+from operators.check_previous_dag_run_operator import CheckPreviousDagRunOperator
+
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
-from airflow.sensors.external_task_sensor import ExternalTaskSensor
-from airflow.utils.state import State
 from airflow.operators.python import PythonOperator
+
+from airflow.utils.state import State
 
 from datetime import timedelta
 import pendulum
@@ -64,16 +67,8 @@ for i in range(1, 5):
               )
 
     with dag:
-        previous_dag_run_sensor = ExternalTaskSensor(
-            task_id = 'check_previous_dag_run_finished',
-            external_dag_id = dag_id,
-            external_task_id = 'dag_run_finished',
-            poke_interval = 60,
-            timeout = 60 * 60,
-            allowed_states = [State.SUCCESS, State.SKIPPED],
-            execution_delta = timedelta(minutes = 15),
-            retries = 3,
-            retry_delay = timedelta(minutes = 1)
+        previous_dag_run_sensor = CheckPreviousDagRunOperator(
+            task_id = 'check_previous_dag_run_finished'
         )
 
         eth_data_to_s3 = Web3AlchemyToS3Operator(
