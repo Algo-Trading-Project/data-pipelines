@@ -13,7 +13,7 @@ schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 3,
                                day = 26,
-                               hour = 18,,
+                               hour = 18,
                                minute = 45,
                                tz = 'America/Los_Angeles')
 
