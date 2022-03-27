@@ -13,8 +13,11 @@ schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 3,
                                day = 26,
-                               hour = 13,
+                               hour = 18,,
+                               minute = 45,
                                tz = 'America/Los_Angeles')
+
+
 
 def update_start_and_end_block(i, end_block):
     new_start_block = None
@@ -55,7 +58,8 @@ for i in range(1, 5):
     dag_id = 'fetch_historical_eth_data_{}'.format(i)
     dag = DAG(dag_id,
               start_date = start_date, 
-              schedule_interval = schedule_interval)
+              schedule_interval = schedule_interval,
+              )
 
     with dag:
         previous_dag_run_sensor = ExternalTaskSensor(
@@ -65,7 +69,9 @@ for i in range(1, 5):
             poke_interval = 60,
             timeout = 60 * 60,
             allowed_states = [State.SUCCESS, State.NONE],
-            execution_delta = timedelta(minutes = 15)
+            execution_delta = timedelta(minutes = 15),
+            retries = 3,
+            retry_delay = timedelta(minutes = 1)
         )
 
         eth_data_to_s3 = Web3AlchemyToS3Operator(
@@ -75,7 +81,9 @@ for i in range(1, 5):
             bucket_name = 'project-poseidon-data',
             is_historical_run = True,
             start_block_variable_name = 'start_block_{}'.format(i),
-            end_block_variable_name = 'end_block_{}'.format(i)
+            end_block_variable_name = 'end_block_{}'.format(i),
+            retries = 3,
+            retry_delay = timedelta(minutes = 1)
         )     
 
         s3_key_prefix = 'eth_data_historical/start_block_{}-end_block_{}'.format(i, i)
@@ -94,7 +102,9 @@ for i in range(1, 5):
             redshift_conn_id = 'redshift_conn',
             aws_conn_id = 's3_conn',
             column_list = block_table_cols,
-            copy_options = ["json 'auto'"]
+            copy_options = ["json 'auto'"],
+            retries = 3,
+            retry_delay = timedelta(minutes = 1)
         )
 
         transaction_table_cols = ['transaction_hash', 'block_no', 'to_',
@@ -110,7 +120,9 @@ for i in range(1, 5):
             redshift_conn_id = 'redshift_conn',
             aws_conn_id = 's3_conn',
             column_list = transaction_table_cols,
-            copy_options = ["json 'auto'"]
+            copy_options = ["json 'auto'"],
+            retries = 3,
+            retry_delay = timedelta(minutes = 1)
         )
 
         transfer_event_table_cols = ['transaction_hash', 'block_no', 'from_',
@@ -125,7 +137,9 @@ for i in range(1, 5):
             redshift_conn_id = 'redshift_conn',
             aws_conn_id = 's3_conn',
             column_list = transfer_event_table_cols,
-            copy_options = ["json 'auto'"]
+            copy_options = ["json 'auto'"],
+            retries = 3,
+            retry_delay = timedelta(minutes = 1)
         )
 
         finish = PythonOperator(
