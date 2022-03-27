@@ -59,6 +59,8 @@ for i in range(1, 5):
     dag = DAG(dag_id,
               start_date = start_date, 
               schedule_interval = schedule_interval,
+              catchup = False,
+              max_active_runs = 1
               )
 
     with dag:
@@ -68,7 +70,7 @@ for i in range(1, 5):
             external_task_id = 'dag_run_finished',
             poke_interval = 60,
             timeout = 60 * 60,
-            allowed_states = [State.SUCCESS, State.NONE],
+            allowed_states = [State.SUCCESS, State.SKIPPED],
             execution_delta = timedelta(minutes = 15),
             retries = 3,
             retry_delay = timedelta(minutes = 1)
