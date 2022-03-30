@@ -2,8 +2,6 @@ from time import sleep
 from airflow.models import BaseOperator
 
 class CheckPreviousDagRunOperator(BaseOperator):
-
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -38,4 +36,3 @@ class CheckPreviousDagRunOperator(BaseOperator):
                 sleep(60 * 5)
                 prev_dag_run_state = prev_dag_run.get_state()
                 continue
-

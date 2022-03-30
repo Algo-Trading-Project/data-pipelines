@@ -20,8 +20,6 @@ start_date = pendulum.datetime(year = 2022,
                                minute = 45,
                                tz = 'America/Los_Angeles')
 
-
-
 def update_start_and_end_block(i, end_block):
     new_start_block = None
     new_end_block = None
