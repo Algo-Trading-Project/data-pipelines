@@ -28,7 +28,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
             }
 
             response = r.post(
-                url = Variable.get('alchemy_api_url'),
+                url = Variable.get('alchemy_api_endpoint'),
                 headers = headers,
                 data = json.dumps(params)
             ).json()
