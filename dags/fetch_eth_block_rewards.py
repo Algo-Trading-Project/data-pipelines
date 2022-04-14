@@ -1,6 +1,5 @@
 from airflow import DAG
 from airflow.models import Variable
-from dags.fetch_historical_eth_data import update_start_and_end_block
 
 from operators.web3_alchemy_to_s3_operator import GetBlockRewardsOperator
 
