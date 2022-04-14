@@ -44,7 +44,7 @@ class GetBlockRewardsOperator(BaseOperator):
         return block_rewards_data
 
     def __upload_to_s3(self, block_rewards_data):
-        self.s3_connection = S3Hook(aws_conn_id = 'aws_conn')
+        self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
 
         data_to_upload = json.dumps(block_rewards_data).replace('[', '').replace(']', '').replace('},', '}')
 

@@ -40,7 +40,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
             print(e)
 
     def __upload_to_s3(self, transaction_receipt_data):
-        self.s3_connection = S3Hook(aws_conn_id = 'aws_conn')
+        self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
 
         data_to_upload = json.dumps(transaction_receipt_data).replace('[', '').replace(']', '').replace('},', '}')
 
