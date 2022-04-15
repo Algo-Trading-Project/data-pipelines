@@ -58,7 +58,7 @@ with DAG(
     s3_block_rewards_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_block_rewards_to_redshift',
         schema = 'eth_data',
-        table = 'block_rewards',
+        table = 'block_reward',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/block_rewards_data/block_rewards.json',
         redshift_conn_id = 'redshift_conn',

@@ -58,7 +58,7 @@ with DAG(
     s3_transaction_receipts_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_transaction_gas_used_to_redshift',
         schema = 'eth_data',
-        table = 'transaction_receipts',
+        table = 'gas_used',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/transaction_receipts_data/transaction_receipts.json',
         redshift_conn_id = 'redshift_conn',
