@@ -61,7 +61,7 @@ with DAG(
         table = 'transaction_receipts',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/transaction_receipts_data/transaction_receipts.json',
-        redshift_conn_id = 'redshfit_conn',
+        redshift_conn_id = 'redshift_conn',
         aws_conn_id = 's3_conn',
         column_list = transaction_receipts_table_cols,
         copy_options = ["json 'auto'"],

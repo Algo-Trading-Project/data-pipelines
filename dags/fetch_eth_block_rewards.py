@@ -61,7 +61,7 @@ with DAG(
         table = 'block_rewards',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/block_rewards_data/block_rewards.json',
-        redshift_conn_id = 'redshfit_conn',
+        redshift_conn_id = 'redshift_conn',
         aws_conn_id = 's3_conn',
         column_list = block_rewards_table_cols,
         copy_options = ["json 'auto'"],
