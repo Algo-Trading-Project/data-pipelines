@@ -26,8 +26,8 @@ def update_start_and_end_block():
     new_start_block = min(end_block + 1, web3_instance.eth.block_number)
     new_end_block = min(end_block + 1000, web3_instance.eth.block_number)
 
-    Variable.set(key = 'transaction_receipts_start_block', value = new_start_block)
-    Variable.set(key = 'transaction_receipts_end_block', value = new_end_block)
+    Variable.set(key = 'transaction_gas_used_start_block', value = new_start_block)
+    Variable.set(key = 'transaction_gas_used_end_block', value = new_end_block)
 
     print()
     print('new start block: {}'.format(new_start_block))
