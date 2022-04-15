@@ -15,8 +15,8 @@ def update_start_and_end_block():
     web_provider = Web3.HTTPProvider(Variable.get('infura_endpoint'))
     web3_instance = Web3(web_provider)
 
-    start_block = int(Variable.get('transaction_receipts_start_block'))
-    end_block = int(Variable.get('transaction_receipts_end_block'))
+    start_block = int(Variable.get('transaction_gas_used_start_block'))
+    end_block = int(Variable.get('transaction_gas_used_end_block'))
 
     print()
     print('start block: {}'.format(start_block))
