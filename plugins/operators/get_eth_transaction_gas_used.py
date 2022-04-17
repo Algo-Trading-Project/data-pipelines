@@ -33,10 +33,22 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 data = json.dumps(params)
             ).json()
 
+            request_result = response.get('result')
+            
+            print()
+            print('block_num: {}'.format(block_num))
             print(response)
+            print()
 
-            transaction_receipts = response['result']['receipts']
-            return transaction_receipts
+            if request_result == None:
+                return []
+            
+            request_receipts = request_result.get('receipts')
+
+            if request_receipts == None:
+                return []
+
+            return request_receipts
 
         except Exception as e:
             print(e)
