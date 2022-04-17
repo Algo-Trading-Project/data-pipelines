@@ -33,6 +33,8 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 data = json.dumps(params)
             ).json()
 
+            print(response)
+
             transaction_receipts = response['result']['receipts']
             return transaction_receipts
 
