@@ -79,7 +79,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
         for preprocesseced_transaction_receipt in preprocessed_transaction_receipts:
             processed_transaction_receipt = {}
 
-            processed_transaction_receipt['transaction_hash'] = preprocesseced_transaction_receipt['transactionHash']
+            processed_transaction_receipt['transaction_hash'] = preprocesseced_transaction_receipt['transactionHash'].lower()
             processed_transaction_receipt['block_no'] = int(preprocesseced_transaction_receipt['blockNumber'], 16)
             # value is converted from wei to ether units before being stored to
             # prevent too large of a number from being stored

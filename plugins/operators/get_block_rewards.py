@@ -26,7 +26,7 @@ class GetBlockRewardsOperator(BaseOperator):
 
         block_rewards_data.append({
             'block_no':int(result['blockNumber']), 
-            'miner_address':result['blockMiner'],
+            'miner_address':result['blockMiner'].lower(),
             # Convert wei units into ether units
             'block_reward':(int(result['blockReward']) + int(result['uncleInclusionReward'])) / (10 ** 18)
         })
@@ -34,7 +34,7 @@ class GetBlockRewardsOperator(BaseOperator):
         for uncle in result['uncles']:
             processed_uncle_rewards_data = {
                 'block_no':int(result['blockNumber']),
-                'miner_address':uncle['miner'],
+                'miner_address':uncle['miner'].lower(),
                 # Convert wei units into ether units
                 'block_reward':int(uncle['blockreward']) / (10 ** 18)
             }

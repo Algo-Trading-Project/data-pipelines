@@ -24,7 +24,7 @@ def update_start_and_end_block():
     print()
 
     new_start_block = min(end_block + 1, web3_instance.eth.block_number)
-    new_end_block = min(end_block + 1000, web3_instance.eth.block_number)
+    new_end_block = min(new_start_block + 2000, web3_instance.eth.block_number)
 
     Variable.set(key = 'block_rewards_start_block', value = new_start_block)
     Variable.set(key = 'block_rewards_end_block', value = new_end_block)
@@ -58,7 +58,7 @@ with DAG(
     s3_block_rewards_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_block_rewards_to_redshift',
         schema = 'eth_data',
-        table = 'block_reward',
+        table = 'stg_block_reward',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/block_rewards_data/block_rewards.json',
         redshift_conn_id = 'redshift_conn',

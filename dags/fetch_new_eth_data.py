@@ -28,13 +28,13 @@ with DAG('fetch_new_eth_data',
         end_block_variable_name = 'end_block'
     )     
 
-    block_table_cols = ['block_no', 'block_hash', 'parent_hash', 'timestamp',
+    block_table_cols = ['block_no', 'block_hash', 'parent_hash', 'timestamp', 'date',
                         'difficulty', 'miner_address', 'gas_used',
                         'block_size', 'sha3_uncles', 'gas_limit']
     s3_block_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_block_data_to_redshift',
         schema = 'eth_data',
-        table = 'block',
+        table = 'stg_block',
         method = 'UPSERT',
         upsert_keys = ['block_no'],
         s3_bucket = 'project-poseidon-data',
@@ -50,7 +50,7 @@ with DAG('fetch_new_eth_data',
     s3_transaction_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_transaction_data_to_redshift',
         schema = 'eth_data',
-        table = 'transaction',
+        table = 'stg_transaction',
         method = 'UPSERT',
         upsert_keys = ['transaction_hash'],
         s3_bucket = 'project-poseidon-data',
@@ -67,7 +67,7 @@ with DAG('fetch_new_eth_data',
     s3_transfer_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_transfer_data_to_redshift',
         schema = 'eth_data',
-        table = 'transfer',
+        table = 'stg_transfer',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/transfers.json',
         redshift_conn_id = 'redshift_conn',

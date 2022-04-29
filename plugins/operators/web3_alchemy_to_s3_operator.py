@@ -2,6 +2,8 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.models import Variable
 from time import sleep
+from pendulum import datetime
+import datetime
 
 import requests as r
 import json
@@ -98,6 +100,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 sleep(60 * 5)
                 continue
 
+            print(transfer_response)
+
             preprocessed_transfers.extend(transfer_response['result']['transfers'])
 
             if transfer_response.get('result').get('pageKey') == None:
@@ -109,15 +113,15 @@ class Web3AlchemyToS3Operator(BaseOperator):
         for preprocessed_transfer in preprocessed_transfers:
             processed_transfer = {}
             
-            processed_transfer['transaction_hash'] = preprocessed_transfer['hash']
+            processed_transfer['transaction_hash'] = preprocessed_transfer['hash'].lower()
             processed_transfer['block_no'] = int(preprocessed_transfer['blockNum'], 0)
-            processed_transfer['from_'] = preprocessed_transfer['from']
-            processed_transfer['to_'] = preprocessed_transfer['to']
+            processed_transfer['from_'] = preprocessed_transfer['from'].lower()
+            processed_transfer['to_'] = preprocessed_transfer['to'].lower()
             processed_transfer['token_units'] = str(preprocessed_transfer['value'])
             processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'])
             processed_transfer['asset'] = preprocessed_transfer['asset'] if ((preprocessed_transfer['asset'] != None) and (len(preprocessed_transfer['asset']) <= 16)) else None
             processed_transfer['transfer_category'] = preprocessed_transfer['category']
-            processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address']
+            processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address'].lower()
 
             processed_transfers.append(processed_transfer)
 
@@ -155,14 +159,18 @@ class Web3AlchemyToS3Operator(BaseOperator):
             processed_block_data = {}
             
             processed_block_data['block_no'] = int(block['number'])
-            processed_block_data['block_hash'] = block['hash'].hex()
-            processed_block_data['parent_hash'] = block['parentHash'].hex()
-            processed_block_data['timestamp'] = int(block['timestamp'])
+            processed_block_data['block_hash'] = block['hash'].hex().lower()
+            processed_block_data['parent_hash'] = block['parentHash'].hex().lower()
+
+            block_timestamp = int(block['timestamp'])
+            processed_block_data['timestamp'] = block_timestamp
+            processed_block_data['date'] = datetime.datetime.fromtimestamp(block_timestamp).date()
+
             processed_block_data['difficulty'] = int(block['difficulty'])
-            processed_block_data['miner_address'] = block['miner']
+            processed_block_data['miner_address'] = block['miner'].lower()
             processed_block_data['gas_used'] = int(block['gasUsed'])
             processed_block_data['block_size'] = int(block['size'])
-            processed_block_data['sha3_uncles'] = block['sha3Uncles'].hex()
+            processed_block_data['sha3_uncles'] = block['sha3Uncles'].hex().lower()
             processed_block_data['gas_limit'] = int(block['gasLimit'])
 
             block_batch.append(processed_block_data)
@@ -186,10 +194,10 @@ class Web3AlchemyToS3Operator(BaseOperator):
         for transaction in preprocessed_transactions:
             processed_transaction = {}
 
-            processed_transaction['transaction_hash'] = transaction['hash'].hex()
+            processed_transaction['transaction_hash'] = transaction['hash'].hex().lower()
             processed_transaction['block_no'] = int(transaction['blockNumber'])
-            processed_transaction['to_'] = transaction['to']
-            processed_transaction['from_'] = transaction['from']
+            processed_transaction['to_'] = transaction['to'].lower()
+            processed_transaction['from_'] = transaction['from'].lower()
             # value is converted from wei to ether units before being stored to
             # prevent too large of a number from being stored
             processed_transaction['value'] = int(transaction['value']) / (10 ** 18)
