@@ -100,8 +100,6 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 sleep(60 * 5)
                 continue
 
-            print(transfer_response)
-
             preprocessed_transfers.extend(transfer_response['result']['transfers'])
 
             if transfer_response.get('result').get('pageKey') == None:
@@ -115,13 +113,13 @@ class Web3AlchemyToS3Operator(BaseOperator):
             
             processed_transfer['transaction_hash'] = preprocessed_transfer['hash'].lower()
             processed_transfer['block_no'] = int(preprocessed_transfer['blockNum'], 0)
-            processed_transfer['from_'] = preprocessed_transfer['from'].lower()
-            processed_transfer['to_'] = preprocessed_transfer['to'].lower()
+            processed_transfer['from_'] = preprocessed_transfer['from'].lower() if preprocessed_transfer['from'] != None else None
+            processed_transfer['to_'] = preprocessed_transfer['to'].lower() if preprocessed_transfer['to'] != None else None
             processed_transfer['token_units'] = str(preprocessed_transfer['value'])
             processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'])
             processed_transfer['asset'] = preprocessed_transfer['asset'] if ((preprocessed_transfer['asset'] != None) and (len(preprocessed_transfer['asset']) <= 16)) else None
             processed_transfer['transfer_category'] = preprocessed_transfer['category']
-            processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address'].lower()
+            processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address'].lower() if preprocessed_transfer['rawContract']['address'] != None else None
 
             processed_transfers.append(processed_transfer)
 
