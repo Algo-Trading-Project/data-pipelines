@@ -162,7 +162,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
             block_timestamp = int(block['timestamp'])
             processed_block_data['timestamp'] = block_timestamp
-            processed_block_data['date'] = datetime.datetime.fromtimestamp(block_timestamp).date()
+            processed_block_data['date'] = datetime.datetime.fromtimestamp(block_timestamp).date().strftime('%m/%d/%Y')
 
             processed_block_data['difficulty'] = int(block['difficulty'])
             processed_block_data['miner_address'] = block['miner'].lower()
