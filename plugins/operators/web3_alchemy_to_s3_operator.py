@@ -84,6 +84,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 data = json.dumps(params)
             ).json()
 
+            print(response)
+
             return response
         ############################################ INTERNAL FUNC END ########################################
         pagination_key = None
