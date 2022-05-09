@@ -97,7 +97,7 @@ for i in range(1, 5):
             redshift_conn_id = 'redshift_conn',
             aws_conn_id = 's3_conn',
             column_list = block_table_cols,
-            copy_options = ["json 'auto'"],
+            copy_options = ["json 'auto'",  "DATEFORMAT AS 'MM/DD/YYYY'"],
             retries = 3,
             retry_delay = timedelta(minutes = 1)
         )
@@ -134,6 +134,7 @@ for i in range(1, 5):
             column_list = transfer_event_table_cols,
             copy_options = ["json 'auto'"],
             retries = 3,
+
             retry_delay = timedelta(minutes = 1)
         )
 
