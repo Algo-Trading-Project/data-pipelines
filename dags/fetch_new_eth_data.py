@@ -2,7 +2,7 @@ from airflow import DAG
 from airflow.models import Variable
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
-from airflow.operators import PythonOperator
+from airflow.operators.python import PythonOperator
 
 from datetime import timedelta
 import pendulum
