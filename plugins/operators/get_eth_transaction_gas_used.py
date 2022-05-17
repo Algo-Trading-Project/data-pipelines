@@ -33,6 +33,8 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 data = json.dumps(params)
             ).json()
 
+            print(response)
+
             request_result = response.get('result')
             
             if request_result == None:

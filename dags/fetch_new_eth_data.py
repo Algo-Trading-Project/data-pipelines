@@ -38,7 +38,10 @@ start_date = pendulum.datetime(year = 2022,
 
 with DAG('fetch_new_eth_data',
           start_date = start_date, 
-          schedule_interval = schedule_interval) as dag:
+          schedule_interval = schedule_interval,
+          catchup = False,
+          max_active_runs = 1
+          ) as dag:
 
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
