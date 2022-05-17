@@ -35,11 +35,6 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
 
             request_result = response.get('result')
             
-            print()
-            print('block_num: {}'.format(block_num))
-            print(response)
-            print()
-
             if request_result == None:
                 return []
             
