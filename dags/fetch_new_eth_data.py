@@ -104,4 +104,4 @@ with DAG('fetch_new_eth_data',
         op_args = [int(Variable.get('end_block'))]
     )
 
-    eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift]
+    eth_data_to_s3 >> [s3_block_data_to_redshift, s3_transaction_data_to_redshift, s3_transfer_data_to_redshift] >> finish
