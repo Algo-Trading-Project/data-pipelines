@@ -4,7 +4,8 @@ from airflow.models import Variable
 
 class RedshiftSQLOperator(BaseOperator):
 
-    def __init__(self, query):
+    def __init__(self, query, **kwargs):
+        super().__init__(**kwargs)
         self.query = query
         
     def execute(self, context):
