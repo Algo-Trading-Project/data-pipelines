@@ -1,5 +1,6 @@
 from operators.redshift_sql_operator import RedshiftSQLOperator
 from datetime import timedelta
+import pendulum
 
 from airflow import DAG
 
