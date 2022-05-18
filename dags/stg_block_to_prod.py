@@ -8,6 +8,7 @@ schedule_interval = timedelta(days = 1)
 start_date = pendulum.datetime(year = 2022,
                                month = 5,
                                day = 17,
+                               hour = 7,
                                tz = 'America/Los_Angeles')
 
 with DAG(
