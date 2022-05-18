@@ -4,9 +4,9 @@ from airflow.models import Variable
 
 class RedshiftSQLOperator(BaseOperator):
 
-    def __init__(self, query, **kwargs):
+    def __init__(self, queries, **kwargs):
         super().__init__(**kwargs)
-        self.query = query
+        self.queries = queries
         
     def execute(self, context):
         with redshift_connector.connect(
@@ -15,6 +15,8 @@ class RedshiftSQLOperator(BaseOperator):
             password = Variable.get('redshift_password')
         ) as conn:
             with conn.cursor() as cursor:
-                cursor.execute(self.query)
+                for query in self.queries:
+                    cursor.execute(query)
+                
                 conn.commit()
                         

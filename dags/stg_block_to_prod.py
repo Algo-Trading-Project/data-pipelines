@@ -18,30 +18,38 @@ with DAG(
     max_active_runs = 1
 ) as dag:
     move_staging_data_to_prod = RedshiftSQLOperator(
-        task_id = 'delete_old_data_from_staging',
-        query = """
-        BEGIN;
+        task_id = 'move_staging_data_to_prod',
+        queries = [
+            """
+            BEGIN;
+            """,
 
-        INSERT INTO administrator.eth_data.block (
-            SELECT *
-            FROM 
-                eth_data.stg_block
+            """
+            INSERT INTO administrator.eth_data.block (
+                SELECT *
+                FROM 
+                    administrator.eth_data.stg_block
+                WHERE 
+                    date >= (
+                        SELECT MAX(date)
+                        FROM administrator.eth_data.block
+                    )
+            );
+            """,
+
+            """
+            DELETE FROM administrator.eth_data.stg_block
             WHERE 
                 date >= (
                     SELECT MAX(date)
-                    FROM eth_data.block
-                )
-        );
+                    FROM administrator.eth_data.block
+                );
+            """,
 
-        DELETE FROM administrator.eth_data.stg_block
-        WHERE 
-            date >= (
-                SELECT MAX(date)
-                FROM administrator.eth_data.block
-            );
-
-        COMMIT;
-        """
+            """
+            COMMIT;
+            """
+        ]
     )
 
     move_staging_data_to_prod 
