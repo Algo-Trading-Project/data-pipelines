@@ -30,7 +30,7 @@ with DAG(
                 FROM 
                     administrator.eth_data.stg_block
                 WHERE 
-                    date >= (
+                    block_no >= (
                         SELECT MAX(date)
                         FROM administrator.eth_data.block
                     )
@@ -40,7 +40,7 @@ with DAG(
             """
             DELETE FROM administrator.eth_data.stg_block
             WHERE 
-                date >= (
+                date <= (
                     SELECT MAX(date)
                     FROM administrator.eth_data.block
                 );
