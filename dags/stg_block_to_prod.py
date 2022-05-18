@@ -1,4 +1,3 @@
-from operators.redshift_to_redshift_operator import RedshiftToRedshiftOperator
 from operators.redshift_sql_operator import RedshiftSQLOperator
 from datetime import timedelta
 
