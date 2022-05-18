@@ -35,6 +35,8 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     data = json.dumps(params)
                 ).json()
 
+                print(response)
+
                 error = response.get('error')
 
                 if error != None and error.get('code') == 429:
