@@ -1,6 +1,7 @@
 from airflow.models import BaseOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
+from time import sleep
 
 import requests as r
 import json
@@ -27,25 +28,23 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 'id': 1
             }
 
-            response = r.post(
-                url = Variable.get('alchemy_api_endpoint'),
-                headers = headers,
-                data = json.dumps(params)
-            ).json()
+            while True:
+                response = r.post(
+                    url = Variable.get('alchemy_api_endpoint'),
+                    headers = headers,
+                    data = json.dumps(params)
+                ).json()
 
-            print(response)
+                error = response.get('error')
 
-            request_result = response.get('result')
-            
-            if request_result == None:
-                return []
-            
-            request_receipts = request_result.get('receipts')
+                if error != None and error.get('code') == 429:
+                    print('My app usage has exceeded its compute units per second capacity... Retrying request after 1 minute.')
+                    sleep(60)
+                    continue
 
-            if request_receipts == None:
-                return []
+                request_result = response.get('result').get('receipts')
 
-            return request_receipts
+                return request_result
 
         except Exception as e:
             print(e)
