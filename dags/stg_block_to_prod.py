@@ -30,7 +30,7 @@ with DAG(
                 FROM 
                     administrator.eth_data.stg_block
                 WHERE 
-                    block_no >= (
+                    date >= (
                         SELECT MAX(date)
                         FROM administrator.eth_data.block
                     )
