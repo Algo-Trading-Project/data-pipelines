@@ -35,7 +35,9 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     data = json.dumps(params)
                 ).json()
 
+                print('block: {}'.format(block_num))
                 print(response)
+                print()
 
                 error = response.get('error')
 
@@ -44,9 +46,12 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     sleep(60)
                     continue
 
-                request_result = response.get('result').get('receipts')
+                request_result = response.get('result')
 
-                return request_result
+                if request_result == None:
+                    return []
+                else:
+                    return request_result.get('receipts')
 
         except Exception as e:
             print(e)
