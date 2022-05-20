@@ -113,23 +113,25 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 continue
 
         for preprocessed_transfer in preprocessed_transfers:
-            processed_transfer = {}
-            
-            processed_transfer['transaction_hash'] = preprocessed_transfer['hash'].lower()
-            processed_transfer['block_no'] = int(preprocessed_transfer['blockNum'], 0)
-            processed_transfer['from_'] = preprocessed_transfer['from'].lower() if preprocessed_transfer['from'] != None else None
-            processed_transfer['to_'] = preprocessed_transfer['to'].lower() if preprocessed_transfer['to'] != None else None
-            processed_transfer['token_units'] = str(preprocessed_transfer['value'])
-            processed_transfer['raw_token_units'] = str(preprocessed_transfer['rawContract']['value'])
-            processed_transfer['asset'] = preprocessed_transfer['asset'] if ((preprocessed_transfer['asset'] != None) and (len(preprocessed_transfer['asset']) <= 16)) else None
-            processed_transfer['transfer_category'] = preprocessed_transfer['category']
-            processed_transfer['token_address'] = preprocessed_transfer['rawContract']['address'].lower() if preprocessed_transfer['rawContract']['address'] != None else None
+            processed_transfers.append({
+                'transaction_hash':preprocessed_transfer['hash'].lower(),
 
-            processed_transfers.append(processed_transfer)
+                'block_no':int(preprocessed_transfer['blockNum'], 0),
 
-        print()
-        print('{} transfers found between block {} and {}'.format(len(processed_transfers), start_block, end_block))
-        print()
+                'from_':preprocessed_transfer['from'].lower() if preprocessed_transfer['from'] != None else None,
+
+                'to_':preprocessed_transfer['to'].lower() if preprocessed_transfer['to'] != None else None,
+
+                'token_units':str(preprocessed_transfer['value']),
+
+                'raw_token_units':str(preprocessed_transfer['rawContract']['value']),
+
+                'asset':preprocessed_transfer['asset'] if ((preprocessed_transfer['asset'] != None) and (len(preprocessed_transfer['asset']) <= 16)) else None,
+
+                'transfer_category':preprocessed_transfer['category'],
+
+                'token_address': preprocessed_transfer['rawContract']['address'].lower() if preprocessed_transfer['rawContract']['address'] != None else None
+            })
 
         return processed_transfers
 
@@ -157,25 +159,30 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 sleep(60 * 5)
                 continue
                 
-        for block in preprocessed_blocks:
-            processed_block_data = {}
-            
-            processed_block_data['block_no'] = int(block['number'])
-            processed_block_data['block_hash'] = block['hash'].hex().lower()
-            processed_block_data['parent_hash'] = block['parentHash'].hex().lower()
+        for block in preprocessed_blocks:            
+            block_batch.append({
+                'block_no':int(block['number']),
 
-            block_timestamp = int(block['timestamp'])
-            processed_block_data['timestamp'] = block_timestamp
-            processed_block_data['date'] = datetime.datetime.fromtimestamp(block_timestamp).date().strftime('%m/%d/%Y')
+                'block_hash':block['hash'].hex().lower(),
 
-            processed_block_data['difficulty'] = int(block['difficulty'])
-            processed_block_data['miner_address'] = block['miner'].lower()
-            processed_block_data['gas_used'] = int(block['gasUsed'])
-            processed_block_data['block_size'] = int(block['size'])
-            processed_block_data['sha3_uncles'] = block['sha3Uncles'].hex().lower()
-            processed_block_data['gas_limit'] = int(block['gasLimit'])
+                'parent_hash':block['parentHash'].hex().lower(),
 
-            block_batch.append(processed_block_data)
+                'timestamp':int(block['timestamp']),
+
+                'date': datetime.datetime.fromtimestamp(int(block['timestamp'])).date().strftime('%m/%d/%Y'),
+
+                'difficulty':int(block['difficulty']),
+
+                'miner_address':block['miner'].lower(),
+
+                'gas_used':int(block['gasUsed']),
+
+                'block_size':int(block['size']),
+
+                'sha3_uncles':block['sha3Uncles'].hex().lower(),
+                
+                'gas_limit':int(block['gasLimit'])
+            })
             transaction_batch.append(block['transactions'])
 
         return block_batch, transaction_batch
@@ -186,27 +193,25 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         start_block, end_block = self.__get_start_and_end_block()
 
-        for transaction in transaction_batch:
-            preprocessed_transactions.extend(transaction)
-
-        print()
-        print('{} transactions found between block {} and {}'.format(len(preprocessed_transactions), start_block, end_block))
-        print()
+        for transactions in transaction_batch:
+            preprocessed_transactions.extend(transactions)
 
         for transaction in preprocessed_transactions:
-            processed_transaction = {}
+            processed_transactions.append({
+                'transaction_hash':transaction['hash'].hex().lower(),
+                
+                'block_no':int(transaction['blockNumber']),
 
-            processed_transaction['transaction_hash'] = transaction['hash'].hex().lower()
-            processed_transaction['block_no'] = int(transaction['blockNumber'])
-            processed_transaction['to_'] = transaction['to'].lower() if transaction['to'] != None else None
-            processed_transaction['from_'] = transaction['from'].lower() if transaction['from'] != None else None
-            # value is converted from wei to ether units before being stored to
-            # prevent too large of a number from being stored
-            processed_transaction['value'] = int(transaction['value']) / (10 ** 18)
-            processed_transaction['gas'] = int(transaction['gas'])
-            processed_transaction['gas_price'] = int(transaction['gasPrice'])
-            
-            processed_transactions.append(processed_transaction)
+                'to_':transaction['to'].lower() if transaction['to'] != None else None,
+
+                'from_':transaction['from'].lower() if transaction['from'] != None else None,
+
+                'value':int(transaction['value']) / (10 ** 18),
+
+                'gas':int(transaction['gas']),
+                
+                'gas_price':int(transaction['gasPrice'])
+            })
             
         return processed_transactions
 

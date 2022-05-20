@@ -80,14 +80,12 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
             preprocessed_transaction_receipts.extend(transaction_recipts)
 
         for preprocesseced_transaction_receipt in preprocessed_transaction_receipts:
-            processed_transaction_receipt = {}
-
-            processed_transaction_receipt['transaction_hash'] = preprocesseced_transaction_receipt['transactionHash'].lower()
-            processed_transaction_receipt['block_no'] = int(preprocesseced_transaction_receipt['blockNumber'], 16)
-            # value is converted from wei to ether units before being stored to
-            # prevent too large of a number from being stored
-            processed_transaction_receipt['gas_used'] = int(preprocesseced_transaction_receipt['gasUsed'], 16) / (10 ** 18)
-
-            processed_transaction_receipts.append(processed_transaction_receipt)
+            processed_transaction_receipts.append({
+                'transaction_hash':preprocesseced_transaction_receipt['transactionHash'].lower(),
+                'block_no':int(preprocesseced_transaction_receipt['blockNumber'], 16),
+                # value is converted from wei to ether units before being stored to
+                # prevent too large of a number from being stored
+                'gas_used':int(preprocesseced_transaction_receipt['gasUsed'], 16) / (10 ** 18)
+            })
 
         self.__upload_to_s3(processed_transaction_receipts)

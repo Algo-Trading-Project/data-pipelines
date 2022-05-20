@@ -32,14 +32,12 @@ class GetBlockRewardsOperator(BaseOperator):
         })
 
         for uncle in result['uncles']:
-            processed_uncle_rewards_data = {
+            block_rewards_data.append({
                 'block_no':int(result['blockNumber']),
                 'miner_address':uncle['miner'].lower(),
                 # Convert wei units into ether units
                 'block_reward':int(uncle['blockreward']) / (10 ** 18)
-            }
-
-            block_rewards_data.append(processed_uncle_rewards_data)
+            })
 
         return block_rewards_data
 
