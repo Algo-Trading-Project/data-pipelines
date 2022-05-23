@@ -119,8 +119,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
             result = transfer_response.get('result')
 
             if result == None:
-                print('No data returned for this request... Sleeping for 5 minutes and trying again.')
-                sleep(60 * 5)
+                print('No data returned for this request... Sleeping for 1 minute and trying again.')
+                sleep(60)
                 continue
 
             preprocessed_transfers.extend(result.get('transfers'))
