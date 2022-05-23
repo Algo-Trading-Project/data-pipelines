@@ -96,8 +96,14 @@ class Web3AlchemyToS3Operator(BaseOperator):
             error = transfer_response.get('error')
 
             if error != None and error.get('code') == -32604:
-                print('one of the api calls to get transfer data timed out... sleeping for 5 minutes and trying again.')
-                sleep(60 * 5)
+                print('one of the api calls to get transfer data timed out... sleeping for 1 minute and trying again.')
+                sleep(60)
+                continue
+            elif error != None and error.get('code') == -32600:
+                print('Current api request timed out midway... Restarting entire request after sleeping for a minute.')
+                preprocessed_transfers = []
+                pagination_key = None
+                sleep(60)
                 continue
             elif error != None and error.get('code') == 429:
                 print('My app usage has exceeded its compute units per second capacity... Retrying request after 1 minute.')
