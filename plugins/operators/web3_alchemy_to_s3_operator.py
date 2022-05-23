@@ -104,6 +104,8 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 sleep(60)
                 continue
             elif error != None:
+                print(transfer_response)
+                print(error)
                 print('Error occurred... Sleeping for 1 minute and trying again.')
                 sleep(60)
                 continue
