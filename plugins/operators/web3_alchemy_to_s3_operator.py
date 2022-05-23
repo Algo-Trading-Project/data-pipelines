@@ -103,10 +103,21 @@ class Web3AlchemyToS3Operator(BaseOperator):
                 print('My app usage has exceeded its compute units per second capacity... Retrying request after 1 minute.')
                 sleep(60)
                 continue
+            elif error != None:
+                print('Error occurred... Sleeping for 1 minute and trying again.')
+                sleep(60)
+                continue
 
-            preprocessed_transfers.extend(transfer_response['result']['transfers'])
+            result = transfer_response.get('result')
 
-            if transfer_response.get('result').get('pageKey') == None:
+            if result == None:
+                print('No data returned for this request... Sleeping for 5 minutes and trying again.')
+                sleep(60 * 5)
+                continue
+
+            preprocessed_transfers.extend(result.get('transfers'))
+
+            if result.get('pageKey') == None:
                 break
             else:
                 pagination_key = transfer_response.get('result').get('pageKey')
