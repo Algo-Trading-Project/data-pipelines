@@ -238,7 +238,7 @@ class Web3AlchemyToS3Operator(BaseOperator):
         if self.is_historical_run:
             dest_folder = 'eth_data_historical/' + self.start_block_variable_name + '-' + self.end_block_variable_name
         else:
-            dest_folder = 'eth_data'
+            dest_folder = 'eth_data/block_and_transaction_data'
             
         json_block_data = json.dumps(block_data).replace('[', '').replace(']', '').replace('},', '}')
         self.s3_connection.load_string(
