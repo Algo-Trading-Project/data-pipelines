@@ -24,5 +24,5 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
         print(coinapi_eth_pairs_json)
 
-        df = pd.read_json(coinapi_eth_pairs_json, orient = 'records')
+        df = pd.DataFrame(coinapi_eth_pairs_json)
         print(df)
