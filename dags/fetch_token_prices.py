@@ -24,6 +24,27 @@ with DAG(
     catchup = False,
     max_active_runs = 1
 ) as dag:
-    test = GetCoinAPIPricesOperator(task_id = 's', time_interval = 'day')
+    eth_pairs_price_data_to_s3 = GetCoinAPIPricesOperator(
+        task_id = 'eth_pairs_price_data_to_s3',
+        time_interval = 'day'
+    )
 
-    test
+    price_data_1d_cols = ['time_period_start', 'time_period_end', 'time_open', 'time_close',
+                          'price_open', 'price_high', 'price_low', 'volume_traded',
+                          'trades_count', 'exchange_id', 'symbol_id', 'asset_id_base', 
+                          'asset_id_quote']
+
+    s3_eth_pairs_price_data_to_redshift = S3ToRedshiftOperator(
+        schema = 'eth',
+        table = 'price_data_1d',
+        s3_bucket = 'project-poseidon-data',
+        s3_key = 'eth_data/price_data/coinapi_eth_pair_prices_1_day',
+        redshift_conn_id = 'redshift_conn',
+        aws_conn_id = 's3_conn',
+        method = 'UPSERT',
+        upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote'],
+        copy_options = ["json 'auto'"],
+        column_list = price_data_1d_cols
+    )
+
+    eth_pairs_price_data_to_s3 >> s3_eth_pairs_price_data_to_redshift
