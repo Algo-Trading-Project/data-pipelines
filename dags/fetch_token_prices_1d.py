@@ -35,6 +35,7 @@ with DAG(
                           'asset_id_quote']
 
     s3_eth_pairs_1d_price_data_to_redshift = S3ToRedshiftOperator(
+        task_id = 's3_eth_pairs_1d_price_data_to_redshift',
         schema = 'eth',
         table = 'price_data_1d',
         s3_bucket = 'project-poseidon-data',
