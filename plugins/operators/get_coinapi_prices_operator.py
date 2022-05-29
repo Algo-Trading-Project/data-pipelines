@@ -28,7 +28,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             'day':datetime.timedelta(days = 1)
         }
 
-        if most_recent_data_date.isna():
+        if pd.isnull(most_recent_data_date):
             next_start_date = pd.to_datetime(eth_pair['data_start'])
         else:
             next_start_date = pd.to_datetime(most_recent_data_date) + time_delta_map[self.time_interval]
@@ -125,4 +125,3 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 self.__update_coinapi_eth_pairs_metadata(latest_price_data_for_pair,
                                                          coinapi_eth_pairs_df, 
                                                          eth_pair['asset_id_base'])
-
