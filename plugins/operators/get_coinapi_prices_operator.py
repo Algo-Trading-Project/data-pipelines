@@ -52,7 +52,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         sort_key = lambda x: pd.to_datetime(x['time_period_start'])
 
         element_w_latest_date = max(latest_price_data_for_pair, key = sort_key)
-        new_latest_scrape_date = pd.to_datetime(element_w_latest_date['time_period_start'])
+        new_latest_scrape_date = parser.parse(element_w_latest_date['time_period_start']).isoformat()
 
         coinapi_eth_pairs_df.loc[coinapi_eth_pairs_df['asset_id_base'] == asset, 'latest_scrape_date_1_{}'.format(self.time_interval)] = new_latest_scrape_date
         coinapi_eth_pairs_json = coinapi_eth_pairs_df.to_dict(orient = 'records')
