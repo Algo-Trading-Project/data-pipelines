@@ -39,7 +39,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
     def __upload_new_price_data(self, new_price_data):
         data_to_uplaod = json.dumps(new_price_data).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/price_data/coinapi_eth_pair_prices_1_{}'.format(self.time_interval)
+        key = 'eth_data/price_data/coinapi_eth_pair_prices_1_{}.json'.format(self.time_interval)
 
         self.s3_connection.load_string(
             string_data = data_to_uplaod, 
@@ -90,9 +90,9 @@ class GetCoinAPIPricesOperator(BaseOperator):
         print()
 
         # Error occurred during request
-        if type(response) == dict and response.get('error') != None:
+        if type(response) == dict and response.get('error') == 429:
             print(response)
-            return None
+            return 429
 
         # Request returned no data
         elif type(response) == list and len(response) == 0:
@@ -127,10 +127,14 @@ class GetCoinAPIPricesOperator(BaseOperator):
                                                                       period_id = period_id, 
                                                                       time_start = time_start)
 
-            if latest_price_data_for_pair == None:
-                print('last request did not return data.... task finished.')
+            if latest_price_data_for_pair == 429:
+                print('Exceeded API key rate limits for today... task finished.')
                 break
+            elif latest_price_data_for_pair == None:
+                print('No data returned for request... continuing to next pair.')
+                continue
             else:
+                print('got data for this pair... uploading to S3 and updating coinapi eth pairs metadata.')
                 new_price_data.extend(latest_price_data_for_pair)
 
                 self.__upload_new_price_data(new_price_data)
