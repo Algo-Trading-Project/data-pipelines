@@ -44,7 +44,7 @@ with DAG(
         aws_conn_id = 's3_conn',
         method = 'UPSERT',
         upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote'],
-        copy_options = ["json 'auto'"],
+        copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
         column_list = price_data_1d_cols
     )
 
