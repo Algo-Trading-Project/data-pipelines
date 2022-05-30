@@ -18,7 +18,7 @@ start_date = pendulum.datetime(year = 2022,
                                tz = 'America/Los_Angeles')
 
 with DAG(
-    dag_id = 'fetch_coinapi_eth_pair_token_prices',
+    dag_id = 'fetch_token_prices_1d',
     schedule_interval = schedule_interval,
     start_date = start_date,
     catchup = False,
