@@ -79,7 +79,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return response
 
         api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id={}&time_start={}&limit={}'.format(coinapi_symbol_id, period_id, time_start, 100000)
-        headers = {'X-CoinAPI-Key':'93DB7B77-30D0-4A8E-B90B-97D4BDBDD2FE'}
+        headers = {'X-CoinAPI-Key':'5C9347B6-67C7-4117-AF97-CEC58A0B5B0E'}
         
         response = r.get(
             url = api_request_url,
