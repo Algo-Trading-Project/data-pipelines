@@ -79,27 +79,29 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return response
 
         api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id={}&time_start={}&limit={}'.format(coinapi_symbol_id, period_id, time_start, 100000)
-        headers = {'X-CoinAPI-Key':'3D7A02BB-EC62-40F9-8C5C-8625AB51D5ED'}
+        headers = {'X-CoinAPI-Key':'5F73E448-5C5E-4CA9-93E4-DFF015596E20'}
         
         response = r.get(
             url = api_request_url,
             headers = headers,
-        ).json()
+        )
+
+        response_json = response.json()
 
         print('api request url: {}'.format(api_request_url))
         print()
 
-        # Error occurred during request
-        if type(response) == dict and response.get('error') == 429:
-            print(response)
+        # Error occurred during request; Exceeded API key's 24 hour requests executed limit
+        if type(response_json) == dict and response.status_code == 429:
+            print(response_json)
             return 429
 
         # Request returned no data
-        elif type(response) == list and len(response) == 0:
-            print(response)
+        elif type(response_json) == list and len(response_json) == 0:
+            print(response_json)
             return None
 
-        formatted_response = format_response_data(response)
+        formatted_response = format_response_data(response_json)
 
         return formatted_response
 
