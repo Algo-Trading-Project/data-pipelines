@@ -9,6 +9,7 @@ import requests as r
 import json
 import pandas as pd
 import datetime
+import dateutil.parser as parser
 
 class GetCoinAPIPricesOperator(BaseOperator):
 
@@ -29,9 +30,10 @@ class GetCoinAPIPricesOperator(BaseOperator):
         }
 
         if pd.isnull(most_recent_data_date):
-            next_start_date = pd.to_datetime(eth_pair['data_start'])
+            next_start_date = parser.parse(str(eth_pair['data_start'])).isoformat()
         else:
-            next_start_date = pd.to_datetime(most_recent_data_date) + time_delta_map[self.time_interval]
+            next_start_date_str = str(pd.to_datetime(most_recent_data_date) + time_delta_map[self.time_interval])
+            next_start_date = parser.parse(next_start_date_str).isoformat()
 
         return next_start_date
 
