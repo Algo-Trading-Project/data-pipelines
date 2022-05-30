@@ -84,6 +84,8 @@ class GetCoinAPIPricesOperator(BaseOperator):
             headers = headers,
         ).json()
 
+        print(response)
+
         if type(response) == dict and response.get('error') != None:
             return None
 
