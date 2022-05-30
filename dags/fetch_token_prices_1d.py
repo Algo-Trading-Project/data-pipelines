@@ -30,7 +30,7 @@ with DAG(
     )
 
     price_data_1d_cols = ['time_period_start', 'time_period_end', 'time_open', 'time_close',
-                          'price_open', 'price_high', 'price_low', 'volume_traded',
+                          'price_open', 'price_high', 'price_low', 'price_close', 'volume_traded',
                           'trades_count', 'exchange_id', 'symbol_id', 'asset_id_base', 
                           'asset_id_quote']
 

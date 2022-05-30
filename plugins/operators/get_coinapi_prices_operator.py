@@ -3,7 +3,6 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
-from pendulum import date
 
 import requests as r
 import json
@@ -79,7 +78,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return response
 
         api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id={}&time_start={}&limit={}'.format(coinapi_symbol_id, period_id, time_start, 100000)
-        headers = {'X-CoinAPI-Key':'5C9347B6-67C7-4117-AF97-CEC58A0B5B0E'}
+        headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
         
         response = r.get(
             url = api_request_url,
