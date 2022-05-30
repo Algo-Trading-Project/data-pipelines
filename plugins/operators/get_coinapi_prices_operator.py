@@ -86,9 +86,16 @@ class GetCoinAPIPricesOperator(BaseOperator):
             headers = headers,
         ).json()
 
+        print('api request url: {}'.format(api_request_url))
         print(response)
+        print()
 
+        # Error occurred during request
         if type(response) == dict and response.get('error') != None:
+            return None
+
+        # Request returned no data
+        elif type(response) == list and len(response) == 0:
             return None
 
         formatted_response = format_response_data(response)
