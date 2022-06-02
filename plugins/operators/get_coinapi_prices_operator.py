@@ -22,23 +22,16 @@ class GetCoinAPIPricesOperator(BaseOperator):
         most_recent_data_date = eth_pair['latest_scrape_date_1_{}'.format(self.time_interval)]
         next_start_date = None
 
-        time_delta_map = {
-            'min':datetime.timedelta(minutes = 1),
-            'hour':datetime.timedelta(hours = 1),
-            'day':datetime.timedelta(days = 1)
-        }
-
         if pd.isnull(most_recent_data_date):
             next_start_date = parser.parse(str(eth_pair['data_start'])).isoformat()
         else:
-            next_start_date_str = str(pd.to_datetime(most_recent_data_date) + time_delta_map[self.time_interval])
-            next_start_date = parser.parse(next_start_date_str).isoformat()
+            next_start_date = parser.parse(str(most_recent_data_date)).isoformat()
 
         return next_start_date
 
     def __upload_new_price_data(self, new_price_data):
         data_to_uplaod = json.dumps(new_price_data).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/price_data/coinapi_eth_pair_prices_1_{}.json'.format(self.time_interval)
+        key = 'eth_data/price_data/coinapi_pair_prices_1_{}.json'.format(self.time_interval)
 
         self.s3_connection.load_string(
             string_data = data_to_uplaod, 
@@ -47,19 +40,21 @@ class GetCoinAPIPricesOperator(BaseOperator):
             replace = True
         )
 
-    def __update_coinapi_eth_pairs_metadata(self, latest_price_data_for_pair, coinapi_eth_pairs_df, asset):
+    def __update_coinapi_eth_pairs_metadata(self, latest_price_data_for_pair, coinapi_eth_pairs_df, exchange_id, asset_id_base, asset_id_quote):
         sort_key = lambda x: pd.to_datetime(x['time_period_start'])
 
         element_w_latest_date = max(latest_price_data_for_pair, key = sort_key)
         new_latest_scrape_date = parser.parse(element_w_latest_date['time_period_start']).isoformat()
 
-        coinapi_eth_pairs_df.loc[coinapi_eth_pairs_df['asset_id_base'] == asset, 'latest_scrape_date_1_{}'.format(self.time_interval)] = new_latest_scrape_date
+        predicate = (coinapi_eth_pairs_df['exchange_id'] == exchange_id) & (coinapi_eth_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_eth_pairs_df['asset_id_quote'] == asset_id_quote)
+        
+        coinapi_eth_pairs_df.loc[predicate, 'latest_scrape_date_1_{}'.format(self.time_interval)] = new_latest_scrape_date
         coinapi_eth_pairs_json = coinapi_eth_pairs_df.to_dict(orient = 'records')
         coinapi_eth_pairs_str = json.dumps(coinapi_eth_pairs_json).replace('[', '').replace(']', '').replace('},', '}')
 
         self.s3_connection.load_string(
             string_data = coinapi_eth_pairs_str,
-            key = 'eth_data/price_data/coinapi_eth_pairs.json',
+            key = 'eth_data/price_data/coinapi_pair_metadata.json',
             bucket_name = 'project-poseidon-data',
             replace = True
         )
@@ -100,16 +95,18 @@ class GetCoinAPIPricesOperator(BaseOperator):
             print(response_json)
             return None
 
+        elif 'error' in response_json:
+            return None
+
         formatted_response = format_response_data(response_json)
 
         return formatted_response
 
     def execute(self, context):
         period_id_map = {'min':'1MIN', 'hour':'1HRS', 'day':'1DAY'}
-        key = 'eth_data/price_data/coinapi_eth_pairs.json'
+        key = 'eth_data/price_data/coinapi_pair_metadata.json'
         
-        coinapi_eth_pairs_str = '[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']'
-        coinapi_eth_pairs_str = coinapi_eth_pairs_str.replace('}', '},').replace('},]', '}]')
+        coinapi_eth_pairs_str = ('[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']').replace('}', '},').replace('},]', '}]')
 
         coinapi_eth_pairs_json = json.loads(coinapi_eth_pairs_str)
         coinapi_eth_pairs_df = pd.DataFrame(coinapi_eth_pairs_json)
@@ -119,7 +116,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         for i in range(len(coinapi_eth_pairs_df)):
             eth_pair = coinapi_eth_pairs_df.iloc[i]
 
-            print('{}) pair: {}/ETH'.format(i + 1, eth_pair['asset_id_base']))
+            print('{}) pair: {}/{} (exchange: {})'.format(i + 1, eth_pair['asset_id_base']), eth_pair['asset_id_quote'], eth_pair['exchange_id'])
             print()
             
             coinapi_symbol_id = eth_pair['exchange_id'] + '_' + 'SPOT' + '_' + eth_pair['asset_id_base'] + '_' + eth_pair['asset_id_quote']
@@ -142,5 +139,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
                 self.__upload_new_price_data(new_price_data)
                 self.__update_coinapi_eth_pairs_metadata(latest_price_data_for_pair,
-                                                         coinapi_eth_pairs_df, 
-                                                         eth_pair['asset_id_base'])
+                                                         coinapi_eth_pairs_df,
+                                                         eth_pair['exchange_id'],
+                                                         eth_pair['asset_id_base'],
+                                                         eth_pair['asset_id_quote'])
