@@ -108,7 +108,9 @@ class GetCoinAPIPricesOperator(BaseOperator):
         period_id_map = {'min':'1MIN', 'hour':'1HRS', 'day':'1DAY'}
         key = 'eth_data/price_data/coinapi_eth_pairs.json'
         
-        coinapi_eth_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
+        coinapi_eth_pairs_str = '[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']'
+        coinapi_eth_pairs_str = coinapi_eth_pairs_str.replace('}', '},').replace('},]', '}]')
+
         coinapi_eth_pairs_json = json.loads(coinapi_eth_pairs_str)
         coinapi_eth_pairs_df = pd.DataFrame(coinapi_eth_pairs_json)
 
