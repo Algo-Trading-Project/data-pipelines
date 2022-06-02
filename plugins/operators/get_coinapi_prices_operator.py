@@ -114,7 +114,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         for i in range(len(coinapi_eth_pairs_df)):
             eth_pair = coinapi_eth_pairs_df.iloc[i]
 
-            print('{}) pair: {}/{} (exchange: {})'.format(i + 1, eth_pair['asset_id_base']), eth_pair['asset_id_quote'], eth_pair['exchange_id'])
+            print('{}) pair: {}/{} (exchange: {})'.format(i + 1, eth_pair['asset_id_base'], eth_pair['asset_id_quote'], eth_pair['exchange_id']))
             print()
             
             coinapi_symbol_id = eth_pair['exchange_id'] + '_' + 'SPOT' + '_' + eth_pair['asset_id_base'] + '_' + eth_pair['asset_id_quote']
