@@ -94,6 +94,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return None
 
         elif 'error' in response_json:
+            print(response_json)
             return None
 
         formatted_response = format_response_data(response_json)
