@@ -21,9 +21,9 @@ class GetCoinAPIPricesOperator(BaseOperator):
         next_start_date = None
 
         if pd.isnull(most_recent_data_date):
-            next_start_date = parser.parse(str(eth_pair['data_start'])).isoformat()
+            next_start_date = parser.parse(str(eth_pair['data_start'])).isoformat().split('+')[0]
         else:
-            next_start_date = parser.parse(str(most_recent_data_date)).isoformat()
+            next_start_date = parser.parse(str(most_recent_data_date)).isoformat().split('+')[0]
 
         return next_start_date
 
