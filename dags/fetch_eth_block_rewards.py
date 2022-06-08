@@ -1,5 +1,6 @@
 from airflow import DAG
 from airflow.models import Variable
+from eth_utils import to_bytes
 
 from operators.get_block_rewards import GetBlockRewardsOperator
 
@@ -33,7 +34,7 @@ def update_start_and_end_block():
     print('new start block: {}'.format(new_start_block))
     print('new end block: {}'.format(new_end_block))
     print()
-
+ 
 schedule_interval = timedelta(minutes = 15)
 start_date = pendulum.datetime(year = 2022,
                                month = 4,

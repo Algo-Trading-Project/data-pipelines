@@ -36,7 +36,7 @@ with DAG(
     s3_eth_pairs_1h_price_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_pairs_1h_price_data_to_redshift',
         schema = 'eth',
-        table = 'price_data_1h',
+        table = 'stg_price_data_1h',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/price_data/coinapi_pair_prices_1_hour.json',
         redshift_conn_id = 'token_price_database_conn',
