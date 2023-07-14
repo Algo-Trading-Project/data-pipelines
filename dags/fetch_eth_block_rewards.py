@@ -1,6 +1,5 @@
 from airflow import DAG
 from airflow.models import Variable
-from eth_utils import to_bytes
 
 from operators.get_block_rewards import GetBlockRewardsOperator
 

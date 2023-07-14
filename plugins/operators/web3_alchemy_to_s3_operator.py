@@ -210,8 +210,6 @@ class Web3AlchemyToS3Operator(BaseOperator):
         preprocessed_transactions = []
         processed_transactions = []
 
-        start_block, end_block = self.__get_start_and_end_block()
-
         for transactions in transaction_batch:
             preprocessed_transactions.extend(transactions)
 

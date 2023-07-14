@@ -1,5 +1,4 @@
 from airflow import DAG
-from airflow.models import Variable
 
 from operators.get_coinapi_prices_operator import GetCoinAPIPricesOperator
 

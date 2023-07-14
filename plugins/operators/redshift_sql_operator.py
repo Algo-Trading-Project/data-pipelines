@@ -18,5 +18,4 @@ class RedshiftSQLOperator(BaseOperator):
                 for query in self.queries:
                     cursor.execute(query)
                 
-                conn.commit()
-                        
+                conn.commit()           

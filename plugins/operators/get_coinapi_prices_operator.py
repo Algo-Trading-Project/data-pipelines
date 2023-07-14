@@ -133,7 +133,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 print('No data returned for request... continuing to next pair.')
                 continue
             else:
-                print('got data for this pair... uploading to S3 and updating coinapi eth pairs metadata.')
+                print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
                 new_price_data.extend(latest_price_data_for_pair)
 
                 self.__upload_new_price_data(new_price_data)
