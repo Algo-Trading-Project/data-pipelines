@@ -5,12 +5,13 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 from datetime import timedelta
 import pendulum
 
-schedule_interval = timedelta(days = 1, hours = 2)
-start_date = pendulum.datetime(year = 2022,
-                               month = 6,
-                               day = 8,
-                               hour = 2,
-                               tz = 'America/Los_Angeles')
+schedule_interval = timedelta(days = 1, hours = 1)
+start_date = pendulum.datetime(
+    year = 2023,
+    month = 7,
+    day = 14,
+    tz = 'America/Los_Angeles'
+)
 
 with DAG(
     dag_id = 'fetch_token_prices_1h',
@@ -19,15 +20,16 @@ with DAG(
     max_active_runs =  1,
     catchup = False
 ) as dag:
+    
     eth_pairs_1h_price_data_to_s3 = GetCoinAPIPricesOperator(
-        task_id = 'eth_pairs_1h_price_data_to_s3',
-        time_interval = 'hour'
+        task_id = 'eth_pairs_1h_price_data_to_s3'
     )
 
-    price_data_1h_cols = ['time_period_start', 'time_period_end', 'time_open', 'time_close',
-                          'price_open', 'price_high', 'price_low', 'price_close', 'volume_traded',
-                          'trades_count', 'exchange_id', 'symbol_id', 'asset_id_base', 
-                          'asset_id_quote']
+    price_data_1h_cols = [
+        'time_period_start', 'time_period_end', 'time_open', 'time_close',
+        'price_open', 'price_high', 'price_low', 'price_close', 'volume_traded',
+        'trades_count', 'exchange_id', 'symbol_id', 'asset_id_base', 'asset_id_quote'
+    ]
 
     s3_eth_pairs_1h_price_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_pairs_1h_price_data_to_redshift',

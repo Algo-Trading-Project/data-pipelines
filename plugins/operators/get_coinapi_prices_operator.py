@@ -9,19 +9,18 @@ import pandas as pd
 import dateutil.parser as parser
 
 class GetCoinAPIPricesOperator(BaseOperator):
-
-    def __init__(self, time_interval, **kwargs):
+    
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.time_interval = time_interval        
         self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
 
-    def __get_next_start_date(self, eth_pair):
-        most_recent_data_date = eth_pair['latest_scrape_date_1_{}'.format(self.time_interval)]
+    def __get_next_start_date(self, coinapi_pair):
+        most_recent_data_date = coinapi_pair['latest_scrape_date_price']
         next_start_date = None
 
         if pd.isnull(most_recent_data_date):
-            next_start_date = parser.parse(str(eth_pair['data_start'])).isoformat().split('+')[0]
+            next_start_date = parser.parse(str(coinapi_pair['data_start'])).isoformat().split('+')[0]
         else:
             next_start_date = parser.parse(str(most_recent_data_date)).isoformat().split('+')[0]
 
@@ -29,7 +28,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
     def __upload_new_price_data(self, new_price_data):
         data_to_uplaod = json.dumps(new_price_data).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/price_data/coinapi_pair_prices_1_{}.json'.format(self.time_interval)
+        key = 'eth_data/price_data/coinapi_pair_prices_1_hour.json'
 
         self.s3_connection.load_string(
             string_data = data_to_uplaod, 
@@ -38,27 +37,30 @@ class GetCoinAPIPricesOperator(BaseOperator):
             replace = True
         )
 
-    def __update_coinapi_eth_pairs_metadata(self, latest_price_data_for_pair, coinapi_eth_pairs_df, exchange_id, asset_id_base, asset_id_quote):
+    def __update_coinapi_eth_pairs_metadata(self, latest_price_data_for_pair, coinapi_pairs_df, eth_pair):
+        asset_id_base = eth_pair['asset_id_base']
+        asset_id_quote = eth_pair['asset_id_quote']
+        exchange_id = eth_pair['exchange_id']
+
         sort_key = lambda x: pd.to_datetime(x['time_period_start'])
 
         element_w_latest_date = max(latest_price_data_for_pair, key = sort_key)
         new_latest_scrape_date = parser.parse(element_w_latest_date['time_period_start']).isoformat()
 
-        predicate = (coinapi_eth_pairs_df['exchange_id'] == exchange_id) & (coinapi_eth_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_eth_pairs_df['asset_id_quote'] == asset_id_quote)
+        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
         
-        coinapi_eth_pairs_df.loc[predicate, 'latest_scrape_date_1_{}'.format(self.time_interval)] = new_latest_scrape_date
-        coinapi_eth_pairs_json = coinapi_eth_pairs_df.to_dict(orient = 'records')
-        coinapi_eth_pairs_str = json.dumps(coinapi_eth_pairs_json).replace('[', '').replace(']', '').replace('},', '}')
+        coinapi_pairs_df.loc[predicate, 'latest_scrape_date_price'] = new_latest_scrape_date
+        coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
+        coinapi_pairs_str = json.dumps(coinapi_pairs_df_json).replace('[', '').replace(']', '').replace('},', '}')
 
         self.s3_connection.load_string(
-            string_data = coinapi_eth_pairs_str,
+            string_data = coinapi_pairs_str,
             key = 'eth_data/price_data/coinapi_pair_metadata.json',
             bucket_name = 'project-poseidon-data',
             replace = True
         )
 
-    def __get_latest_price_data(self, coinapi_symbol_id, period_id, time_start):
-        
+    def __get_latest_price_data(self, coinapi_symbol_id, time_start):
         def format_response_data(response):
             exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
             
@@ -70,7 +72,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id={}&time_start={}&limit={}'.format(coinapi_symbol_id, period_id, time_start, 100000)
+        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1HRS&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 100000)
         headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
         
         response = r.get(
@@ -78,67 +80,95 @@ class GetCoinAPIPricesOperator(BaseOperator):
             headers = headers,
         )
 
-        response_json = response.json()
+        # Request successful
+        if response.status_code == 200:
+            response_json = response.json()
+            formatted_response = format_response_data(response_json)
+            return formatted_response
+        
+        # Bad Request -- There is something wrong with your request
+        elif response.status_code == 400:
+            print('Bad Request -- There is something wrong with your request')
+            print()
+            return response.status_code
+        
+        # Unauthorized -- Your API key is wrong
+        elif response.status_code == 401:
+            print('Unauthorized -- Your API key is wrong')
+            print()
+            return response.status_code
+        
+        # Forbidden -- Your API key doesnt't have enough privileges to access this resource
+        elif response.status_code == 403:
+            print("Forbidden -- Your API key doesn't have enough privileges to access this resource")
+            print()
+            return response.status_code
+        
+        # Too many requests -- You have exceeded your API key rate limits
+        elif response.status_code == 429:
+            print('Too many requests -- You have exceeded your API key rate limits')
+            print()
+            return response.status_code
 
-        print('api request url: {}'.format(api_request_url))
-        print()
-
-        # Error occurred during request; Exceeded API key's 24 hour requests executed limit
-        if type(response_json) == dict and response.status_code == 429:
-            print(response_json)
-            return 429
-
-        # Request returned no data
-        elif type(response_json) == list and len(response_json) == 0:
-            print(response_json)
-            return None
-
-        elif 'error' in response_json:
-            print(response_json)
-            return None
-
-        formatted_response = format_response_data(response_json)
-
-        return formatted_response
-
+        # No data -- You requested specific single item that we don't have at this moment.
+        elif response.status_code == 550:
+            print("No data -- You requested specific single item that we don't have at this moment.")
+            print()
+            return response.status_code
+        
     def execute(self, context):
-        period_id_map = {'min':'1MIN', 'hour':'1HRS', 'day':'1DAY'}
         key = 'eth_data/price_data/coinapi_pair_metadata.json'
         
-        coinapi_eth_pairs_str = ('[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']').replace('}', '},').replace('},]', '}]')
+        coinapi_pairs_str = ('[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']').replace('}', '},').replace('},]', '}]')
 
-        coinapi_eth_pairs_json = json.loads(coinapi_eth_pairs_str)
-        coinapi_eth_pairs_df = pd.DataFrame(coinapi_eth_pairs_json)
+        coinapi_pairs_json = json.loads(coinapi_pairs_str)
+        coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
 
         new_price_data = []
 
-        for i in range(len(coinapi_eth_pairs_df)):
-            eth_pair = coinapi_eth_pairs_df.iloc[i]
+        for i in range(len(coinapi_pairs_df)):
+            coinapi_pair = coinapi_pairs_df.iloc[i]
 
-            print('{}) pair: {}/{} (exchange: {})'.format(i + 1, eth_pair['asset_id_base'], eth_pair['asset_id_quote'], eth_pair['exchange_id']))
+            print('{}) pair: {}/{} (exchange: {})'.format(i + 1, coinapi_pair['asset_id_base'], coinapi_pair['asset_id_quote'], coinapi_pair['exchange_id']))
             print()
             
-            coinapi_symbol_id = eth_pair['exchange_id'] + '_' + 'SPOT' + '_' + eth_pair['asset_id_base'] + '_' + eth_pair['asset_id_quote']
-            period_id = period_id_map[self.time_interval]
-            time_start = self.__get_next_start_date(eth_pair)
+            coinapi_symbol_id = coinapi_pair['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_pair['asset_id_base'] + '_' + coinapi_pair['asset_id_quote']
 
-            latest_price_data_for_pair = self.__get_latest_price_data(coinapi_symbol_id = coinapi_symbol_id,
-                                                                      period_id = period_id, 
-                                                                      time_start = time_start)
+            time_start = self.__get_next_start_date(coinapi_pair)
 
-            if latest_price_data_for_pair == 429:
-                print('Exceeded API key rate limits for today... task finished.')
-                break
-            elif latest_price_data_for_pair == None:
-                print('No data returned for request... continuing to next pair.')
-                continue
+            latest_price_data_for_pair = self.__get_latest_price_data(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
+            
+            # If request didn't succeed
+            if type(latest_price_data_for_pair) == type(int):
+                
+                # If we have exceeded our API key rate limits then stop this task
+                if latest_price_data_for_pair == 429:
+                    break
+                else:
+                    continue
+
+            # If request succeeded
             else:
-                print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
-                new_price_data.extend(latest_price_data_for_pair)
 
-                self.__upload_new_price_data(new_price_data)
-                self.__update_coinapi_eth_pairs_metadata(latest_price_data_for_pair,
-                                                         coinapi_eth_pairs_df,
-                                                         eth_pair['exchange_id'],
-                                                         eth_pair['asset_id_base'],
-                                                         eth_pair['asset_id_quote'])
+                # If request returned empty response
+                if len(latest_price_data_for_pair) == 0:
+                    print('No data returned for request... continuing to next pair.')
+                    print()
+                    continue
+                
+                # If request returned a non-empty response
+                else:
+                    print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
+                    
+                    # Add to list of new price data
+                    new_price_data.extend(latest_price_data_for_pair)
+                    
+                    # Upload new price data for this pair to S3
+                    self.__upload_new_price_data(new_price_data)
+
+                    # Update the latest scrape date metadata for this pair
+                    self.__update_coinapi_eth_pairs_metadata(
+                        latest_price_data_for_pair,
+                        coinapi_pairs_df,
+                        coinapi_pair
+                    )
