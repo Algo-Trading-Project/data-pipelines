@@ -145,7 +145,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             latest_price_data_for_pair = self.__get_latest_price_data(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
             
             # If request didn't succeed
-            if type(latest_price_data_for_pair) == type(int):
+            if type(latest_price_data_for_pair) == int:
                 
                 # If we have exceeded our API key rate limits then stop this task
                 if latest_price_data_for_pair == 429:
