@@ -114,6 +114,8 @@ class GetCoinAPIPricesOperator(BaseOperator):
             print("No data -- You requested specific single item that we don't have at this moment.")
             print()
             return response.status_code
+        else:
+            return -1
         
     def execute(self, context):
         # S3 key for metadata on coinapi pairs (last scrape date)
@@ -121,7 +123,6 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
         # Read coinapi pairs metadata from S3 and load it into a DataFrame
         coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
-        print(coinapi_pairs_str[:200])
         coinapi_pairs_json = json.loads(coinapi_pairs_str)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
 
