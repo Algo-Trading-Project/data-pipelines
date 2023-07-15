@@ -51,7 +51,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         
         coinapi_pairs_df.loc[predicate, 'latest_scrape_date_price'] = new_latest_scrape_date
         coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
-        coinapi_pairs_str = json.dumps(coinapi_pairs_df_json).replace('[', '').replace(']', '').replace('},', '}')
+        coinapi_pairs_str = json.dumps(coinapi_pairs_df_json)
 
         self.s3_connection.load_string(
             string_data = coinapi_pairs_str,
@@ -120,7 +120,8 @@ class GetCoinAPIPricesOperator(BaseOperator):
         key = 'eth_data/price_data/coinapi_pair_metadata.json'
 
         # Read coinapi pairs metadata from S3 and load it into a DataFrame
-        coinapi_pairs_str = ('[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']').replace('}', '},').replace('},]', '}]')
+        coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
+        print(coinapi_pairs_str[:200])
         coinapi_pairs_json = json.loads(coinapi_pairs_str)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
 
