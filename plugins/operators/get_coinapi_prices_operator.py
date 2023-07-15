@@ -66,7 +66,6 @@ class GetCoinAPIPricesOperator(BaseOperator):
             
             for elem in response:
                 elem['exchange_id'] = exchange_id
-                elem['symbol_id'] = symbol_id
                 elem['asset_id_base'] = asset_id_base
                 elem['asset_id_quote'] = asset_id_quote
 
@@ -117,15 +116,18 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return response.status_code
         
     def execute(self, context):
+        # S3 key for metadata on coinapi pairs (last scrape date)
         key = 'eth_data/price_data/coinapi_pair_metadata.json'
-        
-        coinapi_pairs_str = ('[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']').replace('}', '},').replace('},]', '}]')
 
+        # Read coinapi pairs metadata from S3 and load it into a DataFrame
+        coinapi_pairs_str = ('[' + self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data').strip() + ']').replace('}', '},').replace('},]', '}]')
         coinapi_pairs_json = json.loads(coinapi_pairs_str)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
 
+        # List for newly acquired price data from coinapi
         new_price_data = []
 
+        # For each coinapi pair we have metadata for
         for i in range(len(coinapi_pairs_df)):
             coinapi_pair = coinapi_pairs_df.iloc[i]
 
@@ -134,8 +136,10 @@ class GetCoinAPIPricesOperator(BaseOperator):
             
             coinapi_symbol_id = coinapi_pair['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_pair['asset_id_base'] + '_' + coinapi_pair['asset_id_quote']
 
+            # Get the latest date that was scraped for this pair
             time_start = self.__get_next_start_date(coinapi_pair)
 
+            # Get new data since the latest scrape date
             latest_price_data_for_pair = self.__get_latest_price_data(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
             
             # If request didn't succeed
@@ -159,7 +163,8 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 # If request returned a non-empty response
                 else:
                     print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
-                    
+                    print()
+
                     # Add to list of new price data
                     new_price_data.extend(latest_price_data_for_pair)
                     

@@ -28,13 +28,13 @@ with DAG(
     price_data_1h_cols = [
         'time_period_start', 'time_period_end', 'time_open', 'time_close',
         'price_open', 'price_high', 'price_low', 'price_close', 'volume_traded',
-        'trades_count', 'exchange_id', 'symbol_id', 'asset_id_base', 'asset_id_quote'
+        'trades_count', 'exchange_id', 'asset_id_base', 'asset_id_quote'
     ]
 
     s3_eth_pairs_1h_price_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_eth_pairs_1h_price_data_to_redshift',
-        schema = 'eth',
-        table = 'stg_price_data_1h',
+        schema = 'coinapi',
+        table = 'price_data_1h',
         s3_bucket = 'project-poseidon-data',
         s3_key = 'eth_data/price_data/coinapi_pair_prices_1_hour.json',
         redshift_conn_id = 'token_price_database_conn',
