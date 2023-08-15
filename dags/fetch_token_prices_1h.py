@@ -8,8 +8,8 @@ import pendulum
 schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(
     year = 2023,
-    month = 7,
-    day = 14,
+    month = 8,
+    day = 15,
     tz = 'America/Los_Angeles'
 )
 
@@ -36,7 +36,7 @@ with DAG(
         schema = 'coinapi',
         table = 'price_data_1h',
         s3_bucket = 'project-poseidon-data',
-        s3_key = 'eth_data/price_data/coinapi_pair_prices_1_hour.json',
+        s3_key = 'coinapi_pair_prices_1_hour',
         redshift_conn_id = 'token_price_database_conn',
         aws_conn_id = 's3_conn',
         method = 'UPSERT',
