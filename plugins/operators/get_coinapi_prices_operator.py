@@ -46,7 +46,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
         self.s3_connection.load_string(
             string_data = coinapi_pairs_str,
-            key = 'eth_data/price_data/coinapi_pair_metadata.json',
+            key = 'eth_data/price_metadata/coinapi_pair_metadata.json',
             bucket_name = 'project-poseidon-data',
             replace = True
         )
@@ -70,7 +70,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
     def __delete_price_data_from_s3(self):
         keys_to_delete = self.s3_connection.list_keys(
             bucket_name = 'project-poseidon-data',
-            prefix = 'coinapi_pair_prices_1_hour'
+            prefix = 'eth_data/price_data'
         )
 
         self.s3_connection.delete_objects(
@@ -137,13 +137,10 @@ class GetCoinAPIPricesOperator(BaseOperator):
         
     def execute(self, context):
         # Delete price data potentially stored in S3 from previous task runs
-        try:
-            self.__delete_price_data_from_s3()
-        except:
-            pass
+        self.__delete_price_data_from_s3()
 
         # S3 key for token metadata (last scrape dates)
-        key = 'eth_data/price_data/coinapi_pair_metadata.json'
+        key = 'eth_data/price_metadata/coinapi_pair_metadata.json'
 
         # Read token metadata from S3 and load it into a DataFrame
         coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')

@@ -36,7 +36,7 @@ with DAG(
         schema = 'coinapi',
         table = 'price_data_1h',
         s3_bucket = 'project-poseidon-data',
-        s3_key = 'coinapi_pair_prices_1_hour',
+        s3_key = 'eth_data/price_data',
         redshift_conn_id = 'token_price_database_conn',
         aws_conn_id = 's3_conn',
         method = 'UPSERT',
