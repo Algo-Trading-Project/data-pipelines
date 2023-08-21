@@ -14,7 +14,7 @@ start_date = pendulum.datetime(
 )
 
 with DAG(
-    dag_id = 'fetch_token_prices_1h',
+    dag_id = 'fetch_price_data_1h',
     start_date = start_date,
     schedule_interval = schedule_interval,
     max_active_runs =  1,

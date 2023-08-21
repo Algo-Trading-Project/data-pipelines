@@ -2,34 +2,45 @@ from airflow.models import BaseOperator
 
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
+from datetime import timedelta
 
 import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
 
-class GetCoinAPIPricesOperator(BaseOperator):
+class GetOrderBookDataOperator(BaseOperator):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
+    
         self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
         self.s3_file_chunk_num = 1
 
     def __get_next_start_date(self, coinapi_pair):
-        most_recent_data_date = coinapi_pair['latest_scrape_date_price']
+        def hour_rounder(t):
+            # Rounds up to nearest hour
+            rounded_hour = t.replace(second = 0, microsecond = 0, minute = 0, hour = t.hour) + timedelta(hours = 1)
+            return rounded_hour.strftime('%Y-%m-%d %H:%M:%S')
+        
+        most_recent_data_date = coinapi_pair['latest_scrape_date_orderbook']
         next_start_date = None
 
         if pd.isnull(most_recent_data_date):
-            next_start_date = parser.parse(str(coinapi_pair['data_start'])).isoformat().split('+')[0]
+            start_date = pd.to_datetime(coinapi_pair['data_orderbook_start'])
+            rounded_start_date = hour_rounder(start_date)
+            next_start_date = parser.parse(str(rounded_start_date)).isoformat().split('+')[0]
         else:
             next_start_date = parser.parse(str(most_recent_data_date)).isoformat().split('+')[0]
 
         return next_start_date
 
-    def __upload_new_price_data(self, new_price_data):
-        data_to_uplaod = json.dumps(new_price_data).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/price_data/coinapi_pair_prices_1_hour.json.{}'.format(self.s3_file_chunk_num)
+    def __upload_new_order_book_data(self, new_order_book_data):
+        if len(new_order_book_data) == 0:
+            return
+        
+        data_to_uplaod = json.dumps(new_order_book_data).replace('[', '').replace(']', '').replace('},', '}')
+        key = 'eth_data/order_book_data/coinapi_pair_order_book_snapshot_1_hour.json.{}'.format(self.s3_file_chunk_num)
 
         self.s3_connection.load_string(
             string_data = data_to_uplaod, 
@@ -51,26 +62,23 @@ class GetCoinAPIPricesOperator(BaseOperator):
             replace = True
         )
 
-    def __update_coinapi_pairs_metadata(self, latest_price_data_for_pair, coinapi_pairs_df, coinapi_pair):
+    def __update_coinapi_pairs_metadata(self, time_start, coinapi_pairs_df, coinapi_pair):
         asset_id_base = coinapi_pair['asset_id_base']
         asset_id_quote = coinapi_pair['asset_id_quote']
         exchange_id = coinapi_pair['exchange_id']
 
-        sort_key = lambda x: pd.to_datetime(x['time_period_start'])
-
-        element_w_latest_date = max(latest_price_data_for_pair, key = sort_key)
-        new_latest_scrape_date = str(pd.to_datetime(element_w_latest_date['time_period_start']) + pd.Timedelta(hours = 1))
+        new_latest_scrape_date = str(pd.to_datetime(time_start) + pd.Timedelta(hours = 1))
         new_latest_scrape_date = parser.parse(new_latest_scrape_date).isoformat()
 
         predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
-        coinapi_pairs_df.loc[predicate, 'latest_scrape_date_price'] = new_latest_scrape_date
+        coinapi_pairs_df.loc[predicate, 'latest_scrape_date_orderbook'] = new_latest_scrape_date
 
         return coinapi_pairs_df
     
-    def __delete_price_data_from_s3(self):
+    def __delete_order_book_data_from_s3(self):
         keys_to_delete = self.s3_connection.list_keys(
             bucket_name = 'project-poseidon-data',
-            prefix = 'eth_data/price_data'
+            prefix = 'eth_data/order_book_data'
         )
 
         self.s3_connection.delete_objects(
@@ -78,24 +86,24 @@ class GetCoinAPIPricesOperator(BaseOperator):
             keys = keys_to_delete
         )
 
-    def __get_latest_price_data(self, coinapi_symbol_id, time_start):
+    def __get_latest_order_book_data(self, coinapi_symbol_id, time_start):
         def format_response_data(response):
             exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
             
             for elem in response:
+                elem['bids'] = json.dumps(elem['bids'])
+                elem['asks'] = json.dumps(elem['asks'])
+                
                 elem['exchange_id'] = exchange_id
                 elem['asset_id_base'] = asset_id_base
                 elem['asset_id_quote'] = asset_id_quote
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1HRS&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
+        api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 1)
         headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
         
-        response = r.get(
-            url = api_request_url,
-            headers = headers,
-        )
+        response = r.get(url = api_request_url, headers = headers)
 
         # Request successful
         if response.status_code == 200:
@@ -136,9 +144,9 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return -1
         
     def execute(self, context):
-        # Delete price data potentially stored in S3 from previous task runs
-        self.__delete_price_data_from_s3()
-
+        # Delete order book data potentially stored in S3 from previous task runs
+        self.__delete_order_book_data_from_s3()
+        
         # S3 key for token metadata (last scrape dates)
         key = 'eth_data/metadata/coinapi_pair_metadata.json'
 
@@ -149,6 +157,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
         # For each token we have metadata for
         for i in range(len(coinapi_pairs_df)):
+            order_book_snapshot_data = []
             while True:
                 coinapi_pair = coinapi_pairs_df.iloc[i]
 
@@ -161,14 +170,15 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 time_start = self.__get_next_start_date(coinapi_pair)
 
                 # Get new data since the latest scrape date
-                latest_price_data_for_pair = self.__get_latest_price_data(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
+                latest_order_book_data_for_pair = self.__get_latest_order_book_data(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
                 
                 # If request didn't succeed
-                if type(latest_price_data_for_pair) == int:
+                if type(latest_order_book_data_for_pair) == int:
 
                     # If we have exceeded our API key rate limits then update token metadata stored in
-                    # S3 and stop this task
-                    if latest_price_data_for_pair == 429:
+                    # S3, upload new data collected thus far to S3, and stop this task
+                    if latest_order_book_data_for_pair == 429:
+                        self.__upload_new_order_book_data(order_book_snapshot_data)
                         self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
                         return
 
@@ -180,7 +190,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 else:
 
                     # If request returned an empty response
-                    if len(latest_price_data_for_pair) == 0:
+                    if len(latest_order_book_data_for_pair) == 0:
                         print('No data returned for request... continuing to next pair.')
                         print()
                         break
@@ -190,15 +200,17 @@ class GetCoinAPIPricesOperator(BaseOperator):
                         print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
                         print()
                         
-                        # Upload new price data for this pair to S3
-                        self.__upload_new_price_data(latest_price_data_for_pair)
+                        # Add to list of order book snapshot data for current token
+                        order_book_snapshot_data.extend(latest_order_book_data_for_pair)
 
                         # Update token metadata for this pair locally
                         coinapi_pairs_df = self.__update_coinapi_pairs_metadata(
-                            latest_price_data_for_pair,
+                            time_start,
                             coinapi_pairs_df,
                             coinapi_pair
                         )
+
+            self.__upload_new_order_book_data(order_book_snapshot_data)
 
         # Update token metadata stored in S3
         self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
