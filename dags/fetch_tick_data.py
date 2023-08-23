@@ -21,10 +21,6 @@ with DAG(
     catchup = False
 ) as dag:
     
-    tick_data_to_s3 = GetTickDataOperator(
-        task_id = 'tick_data_to_s3'
-    )
-
     tick_data_1h_cols = [
         'symbol_id', 'time_exchange', 'time_coinapi', 'uuid',
         'price', 'size', 'taker_side', 'asset_id_base', 'asset_id_quote',
@@ -33,7 +29,11 @@ with DAG(
 
     upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote',
                    'time_exchange', 'time_coinapi', 'uuid', 'taker_side']
-
+    
+    tick_data_to_s3 = GetTickDataOperator(
+        task_id = 'tick_data_to_s3'
+    )
+    
     s3_tick_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_tick_data_to_redshift',
         schema = 'coinapi',

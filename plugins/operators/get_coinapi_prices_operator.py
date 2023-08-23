@@ -92,10 +92,14 @@ class GetCoinAPIPricesOperator(BaseOperator):
         api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1HRS&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
         headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
         
-        response = r.get(
-            url = api_request_url,
-            headers = headers,
-        )
+        try:
+            response = r.get(
+                url = api_request_url,
+                headers = headers,
+            )
+        except:
+
+            return -1
 
         # Request successful
         if response.status_code == 200:
@@ -174,6 +178,8 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
                     # Else just proceed to the next token
                     else:
+                        print('API request for data failed... continuing to next token.')
+                        print()
                         break
 
                 # If request succeeded
@@ -181,13 +187,13 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
                     # If request returned an empty response
                     if len(latest_price_data_for_pair) == 0:
-                        print('No data returned for request... continuing to next pair.')
+                        print('No data returned for request... continuing to next token.')
                         print()
                         break
                     
                     # If request returned a non-empty response
                     else:
-                        print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
+                        print('got data for this token... uploading to S3 and updating coinapi pairs metadata.')
                         print()
                         
                         # Upload new price data for this pair to S3
