@@ -46,14 +46,14 @@ class GetOrderBookDataOperator(BaseOperator):
             # Get the date of the first order book snapshot for this token
             next_start_date = pd.to_datetime(coinapi_token['data_orderbook_start'])
             # Round the date up to the nearest hour
-            next_start_date = hour_rounder(start_date)
+            next_start_date = hour_rounder(next_start_date)
             # Convert the date to ISO 8601 format
             next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
         
         # If we have scraped order book data for this token before
         else:
             # Convert the date to ISO 8601 format
-            next_start_date = parser.parse(str(most_recent_data_date)).isoformat().split('+')[0]
+            next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
 
         return next_start_date
 
