@@ -31,7 +31,7 @@ with DAG(
     ]
 
     s3_order_book_data_1h_to_redshift = S3ToRedshiftOperator(
-        task_id = 's3_order_book_data_1h_to_redshifts',
+        task_id = 's3_order_book_data_1h_to_redshift',
         schema = 'coinapi',
         table = 'order_book_data_1h',
         s3_bucket = 'project-poseidon-data',
