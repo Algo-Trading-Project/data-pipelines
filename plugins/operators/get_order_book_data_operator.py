@@ -30,19 +30,19 @@ class GetOrderBookDataOperator(BaseOperator):
         self.s3_file_chunk_num = 1
 
     # Gets the next date to scrape order book data for current token
-    def __get_next_start_date(self, coinapi_pair):
+    def __get_next_start_date(self, coinapi_token):
         def hour_rounder(t):
             # Round pandas datetime object t up to the nearest hour
             rounded_hour = t.replace(second = 0, microsecond = 0, minute = 0, hour = t.hour) + timedelta(hours = 1)
             return rounded_hour.strftime('%Y-%m-%d %H:%M:%S')
         
         # Get the next date to scrape order book data for current token
-        next_start_date = coinapi_pair['latest_scrape_date_orderbook']
+        next_start_date = coinapi_token['latest_scrape_date_orderbook']
 
         # If we have never scraped order book data for this token before
         if pd.isnull(next_start_date):
             # Get the date of the first order book snapshot for this token
-            next_start_date = pd.to_datetime(coinapi_pair['data_orderbook_start'])
+            next_start_date = pd.to_datetime(coinapi_token['data_orderbook_start'])
             # Round the date up to the nearest hour
             next_start_date = hour_rounder(start_date)
             # Convert the date to ISO 8601 format
@@ -77,36 +77,36 @@ class GetOrderBookDataOperator(BaseOperator):
         self.s3_file_chunk_num += 1
 
     # Uploads updated token metadata to S3
-    def __upload_updated_coinapi_metadata(self, coinapi_pairs_df):
+    def __upload_updated_coinapi_metadata(self, token_metadata_df):
         
         # Convert updated token metadata DF to JSON
-        coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
-        coinapi_pairs_str = json.dumps(coinapi_pairs_df_json)
+        token_metadata_df_json = token_metadata_df.to_dict(orient = 'records')
+        token_metadata_str = json.dumps(token_metadata_df_json)
 
         # Upload updated token metadata to S3
         self.s3_connection.load_string(
-            string_data = coinapi_pairs_str,
+            string_data = token_metadata_str,
             key = 'eth_data/metadata/coinapi_pair_metadata.json',
             bucket_name = 'project-poseidon-data',
             replace = True
         )
 
     # Updates next scrape date for current token locally
-    def __update_coinapi_metadata(self, time_start, coinapi_pairs_df, coinapi_pair):
-        asset_id_base = coinapi_pair['asset_id_base']
-        asset_id_quote = coinapi_pair['asset_id_quote']
-        exchange_id = coinapi_pair['exchange_id']
+    def __update_coinapi_metadata(self, time_start, token_metadata_df, coinapi_token):
+        asset_id_base = coinapi_token['asset_id_base']
+        asset_id_quote = coinapi_token['asset_id_quote']
+        exchange_id = coinapi_token['exchange_id']
 
         # Next scrape date is one hour after the current scrape date
         next_scrape_date = str(pd.to_datetime(time_start) + pd.Timedelta(hours = 1))
         next_scrape_date = parser.parse(next_scrape_date).isoformat()
 
         # Update next scrape date for current token locally
-        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
-        coinapi_pairs_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
+        predicate = (token_metadata_df['exchange_id'] == exchange_id) & (token_metadata_df['asset_id_base'] == asset_id_base) & (token_metadata_df['asset_id_quote'] == asset_id_quote)
+        token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
 
         # Return updated token metadata DF
-        return coinapi_pairs_df
+        return token_metadata_df
     
     # Deletes order book data from S3
     def __delete_order_book_data_from_s3(self):
@@ -142,7 +142,7 @@ class GetOrderBookDataOperator(BaseOperator):
 
         # Make request to CoinAPI
         api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 1)
-        headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
+        headers = {'X-CoinAPI-Key':Variable.get('COINAPI_API_KEY')}
         
         try:
             response = r.get(url = api_request_url, headers = headers)
@@ -200,6 +200,7 @@ class GetOrderBookDataOperator(BaseOperator):
         Returns:
             None
         """
+
         # Delete order book data potentially stored in S3 from previous task runs
         self.__delete_order_book_data_from_s3()
         
@@ -207,43 +208,53 @@ class GetOrderBookDataOperator(BaseOperator):
         key = 'eth_data/metadata/coinapi_pair_metadata.json'
 
         # Read token metadata from S3 and load it into a DataFrame
-        coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
-        coinapi_pairs_json = json.loads(coinapi_pairs_str)
-        coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
+        token_metadata_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
+        token_metadata_json = json.loads(token_metadata_str)
+        token_metadata_df = pd.DataFrame(token_metadata_json)
 
         # Filter out tokens we don't want to get order book data for
-        base_quote_exchange = coinapi_pairs_df['asset_id_base'] + '_' + coinapi_pairs_df['asset_id_quote'] + '_' + coinapi_pairs_df['exchange_id']
+        base_quote_exchange = token_metadata_df['asset_id_base'] + '_' + token_metadata_df['asset_id_quote'] + '_' + token_metadata_df['exchange_id']
         predicate = base_quote_exchange.isin(self.DESIRED_TOKENS)
-        coinapi_pairs_df = coinapi_pairs_df[predicate]
+        token_metadata_df = token_metadata_df[predicate]
 
         # For each token in DESIRED_TOKENS
-        for i in range(len(coinapi_pairs_df)):
+        for i in range(len(token_metadata_df)):
 
             # List of order book snapshots for current token
-            order_book_snapshot_data = []
+            order_book_snapshots = []
 
             while True:
-                coinapi_pair = coinapi_pairs_df.iloc[i]
 
-                print('{}) pair: {}/{} (exchange: {})'.format(i + 1, coinapi_pair['asset_id_base'], coinapi_pair['asset_id_quote'], coinapi_pair['exchange_id']))
+                # Get token metadata for current token
+                coinapi_token = token_metadata_df.iloc[i]
+
+                print('{}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
                 print()
                 
-                coinapi_symbol_id = coinapi_pair['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_pair['asset_id_base'] + '_' + coinapi_pair['asset_id_quote']
+                # Get CoinAPI symbol ID for current token
+                coinapi_symbol_id = coinapi_token['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote']
 
                 # Get the next date to scrape order book data for current token
-                time_start = self.__get_next_start_date(coinapi_pair)
+                time_start = self.__get_next_start_date(coinapi_token)
 
+                # If time_start is a date in the future
+                if pd.to_datetime(time_start) > pd.to_datetime('now'):
+                    # Stop scraping order book data for current token
+                    print('time_start is a date in the future... continuing to next token.')
+                    print()
+                    break
+            
                 # Get order book snapshot on time_start for current token
-                latest_order_book_data_for_pair = self.__get_order_book_snapshot(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
+                order_book_snapshot = self.__get_order_book_snapshot(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
                 
                 # If request didn't succeed
-                if type(latest_order_book_data_for_pair) == int:
+                if type(order_book_snapshot) == int:
 
                     # If we have exceeded our API key rate limits then update token metadata stored in
                     # S3, upload new data collected thus far to S3, and stop this tas
-                    if latest_order_book_data_for_pair == 429:
-                        self.__upload_new_order_book_data(order_book_snapshot_data)
-                        self.__upload_updated_coinapi_metadata(coinapi_pairs_df)
+                    if order_book_snapshot == 429:
+                        self.__upload_new_order_book_data(order_book_snapshots)
+                        self.__upload_updated_coinapi_metadata(token_metadata_df)
                         return
 
                     # Else just proceed to the next token
@@ -254,8 +265,8 @@ class GetOrderBookDataOperator(BaseOperator):
                 else:
 
                     # If request returned an empty response
-                    if len(latest_order_book_data_for_pair) == 0:
-                        print('No data returned for request... continuing to next pair.')
+                    if len(order_book_snapshot) == 0:
+                        print('No data returned for request... continuing to next token.')
                         print()
                         break
                     
@@ -264,17 +275,17 @@ class GetOrderBookDataOperator(BaseOperator):
                         print('Data returned for ({})... continuing to next request.'.format(time_start))
                         
                         # Add to list of order book snapshots for current token
-                        order_book_snapshot_data.extend(latest_order_book_data_for_pair)
+                        order_book_snapshots.extend(order_book_snapshot)
 
                         # Update metadata for this token locally
-                        coinapi_pairs_df = self.__update_coinapi_metadata(
+                        token_metadata_df = self.__update_coinapi_metadata(
                             time_start,
-                            coinapi_pairs_df,
-                            coinapi_pair
+                            token_metadata_df,
+                            coinapi_token
                         )
 
             # Upload new order book data collected for current token to S3
-            self.__upload_new_order_book_data(order_book_snapshot_data)
+            self.__upload_new_order_book_data(order_book_snapshots)
 
         # Update token metadata stored in S3
-        self.__upload_updated_coinapi_metadata(coinapi_pairs_df)
+        self.__upload_updated_coinapi_metadata(token_metadata_df)
