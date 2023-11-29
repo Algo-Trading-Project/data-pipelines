@@ -153,6 +153,8 @@ class GetOrderBookDataOperator(BaseOperator):
 
         # Request successful
         if response.status_code == 200:
+            print('Request Successful')
+            print(response.json())
             response_json = response.json()
             formatted_response = format_response_data(response_json)
             return formatted_response
