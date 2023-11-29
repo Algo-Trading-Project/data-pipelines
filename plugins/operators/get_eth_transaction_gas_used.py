@@ -83,9 +83,9 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
             processed_transaction_receipts.append({
                 'transaction_hash':preprocesseced_transaction_receipt['transactionHash'].lower(),
                 'block_no':int(preprocesseced_transaction_receipt['blockNumber'], 16),
-                # value is converted from wei to ether units before being stored to
-                # prevent too large of a number from being stored
-                'gas_used':int(preprocesseced_transaction_receipt['gasUsed'], 16) / (10 ** 18)
+                # Value is converted from gwei to ether units before being stored 
+                'effective_gas_price': float(preprocesseced_transaction_receipt['effectiveGasPrice']) * (10 ** 9),
+                'gas_used':int(preprocesseced_transaction_receipt['gasUsed'], 16)
             })
 
         self.__upload_to_s3(processed_transaction_receipts)
