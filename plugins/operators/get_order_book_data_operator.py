@@ -236,6 +236,20 @@ class GetOrderBookDataOperator(BaseOperator):
             order_book_snapshots = []
 
             while True:
+                # Every time we have collected 24 * 30 order book snapshots (~1 month's worth of data)
+                if len(order_book_snapshots) % 24 * 30 == 0:
+                    
+                    print('One month of data collected... uploading to S3 and updating metadata.')
+                    print()
+
+                    # Upload new order book snapshots to S3
+                    self.__upload_new_order_book_data(order_book_snapshots)
+
+                    # Update token metadata stored in S3
+                    self.__upload_updated_coinapi_metadata(token_metadata_df)
+
+                    # Empty list of order book snapshots for current token
+                    order_book_snapshots = []
 
                 # Get token metadata for current token
                 coinapi_token = token_metadata_df.iloc[i]
@@ -299,5 +313,5 @@ class GetOrderBookDataOperator(BaseOperator):
             # Upload new order book data collected for current token to S3
             self.__upload_new_order_book_data(order_book_snapshots)
 
-        # Update token metadata stored in S3
-        self.__upload_updated_coinapi_metadata(token_metadata_df)
+            # Update token metadata stored in S3
+            self.__upload_updated_coinapi_metadata(token_metadata_df)
