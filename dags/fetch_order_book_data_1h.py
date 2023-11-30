@@ -22,7 +22,8 @@ with DAG(
 ) as dag:
     
     order_book_data_1h_to_s3 = GetOrderBookDataOperator(
-        task_id = 'order_book_data_1h_to_s3'
+        task_id = 'order_book_data_1h_to_s3',
+        on_failure_callback = GetOrderBookDataOperator.on_task_failure,
     )
 
     order_book_data_1h_cols = [
@@ -32,6 +33,7 @@ with DAG(
 
     s3_order_book_data_1h_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_order_book_data_1h_to_redshift',
+        trigger_rule = 'all_done',
         schema = 'coinapi',
         table = 'order_book_data_1h',
         s3_bucket = 'project-poseidon-data',

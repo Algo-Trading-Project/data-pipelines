@@ -1,7 +1,7 @@
 from airflow.models import BaseOperator
-
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
+
 from datetime import timedelta
 
 import requests as r
@@ -31,8 +31,35 @@ class GetOrderBookDataOperator(BaseOperator):
         # File chunk number for order book data
         self.s3_file_chunk_num = 1
 
+        # List of order book snapshots for current token
+        self.order_book_snapshots = []
+
+        # Token metadata stored in S3
+        self.token_metadata_df = self._get_coinapi_metadata()
+
+    @staticmethod
+    def on_task_failure(context):
+        """
+        Callback function that gets called if an instance of this task fails.
+
+        Parameters:
+            context - Airflow context object
+
+        Returns:
+            None
+        """
+        
+        # Access the operator instance via context
+        operator_instance = context['task_instance'].task
+        
+        # Upload any data collected before the task failed to S3
+        operator_instance._upload_new_order_book_data(operator_instance.order_book_snapshots)
+
+        # Update token metadata stored in S3 with new scrape dates
+        operator_instance._upload_updated_coinapi_metadata(operator_instance.token_metadata_df)
+
     # Gets the next date to scrape order book data for current token
-    def __get_next_start_date(self, coinapi_token):
+    def _get_next_start_date(self, coinapi_token):
         def hour_rounder(t):
             # Round pandas datetime object t up to the nearest hour
             rounded_hour = t.replace(second = 0, microsecond = 0, minute = 0, hour = t.hour) + timedelta(hours = 1)
@@ -58,7 +85,7 @@ class GetOrderBookDataOperator(BaseOperator):
         return next_start_date
 
     # Uploads new order book data to S3
-    def __upload_new_order_book_data(self, new_order_book_data):
+    def _upload_new_order_book_data(self, new_order_book_data):
         
         # If there is no new order book data to upload then return
         if len(new_order_book_data) == 0:
@@ -79,7 +106,7 @@ class GetOrderBookDataOperator(BaseOperator):
         self.s3_file_chunk_num += 1
 
     # Uploads updated token metadata to S3
-    def __upload_updated_coinapi_metadata(self, token_metadata_df):
+    def _upload_updated_coinapi_metadata(self, token_metadata_df):
         
         # Convert updated token metadata DF to JSON
         token_metadata_df_json = token_metadata_df.to_dict(orient = 'records')
@@ -94,7 +121,7 @@ class GetOrderBookDataOperator(BaseOperator):
         )
 
     # Updates next scrape date for current token locally
-    def __update_coinapi_metadata(self, time_start, token_metadata_df, coinapi_token):
+    def _update_coinapi_metadata(self, time_start, token_metadata_df, coinapi_token):
         asset_id_base = coinapi_token['asset_id_base']
         asset_id_quote = coinapi_token['asset_id_quote']
         exchange_id = coinapi_token['exchange_id']
@@ -111,7 +138,7 @@ class GetOrderBookDataOperator(BaseOperator):
         return token_metadata_df
     
     # Deletes order book data from S3
-    def __delete_order_book_data_from_s3(self):
+    def _delete_order_book_data_from_s3(self):
 
         # Get keys for order book data stored in S3
         keys_to_delete = self.s3_connection.list_keys(
@@ -126,7 +153,7 @@ class GetOrderBookDataOperator(BaseOperator):
         )
         
     # Gets order book snapshot from CoinAPI for a given token and date
-    def __get_order_book_snapshot(self, coinapi_symbol_id, time_start):
+    def _get_order_book_snapshot(self, coinapi_symbol_id, time_start):
         
         # Formats response data from CoinAPI
         def format_response_data(response):
@@ -202,19 +229,8 @@ class GetOrderBookDataOperator(BaseOperator):
             print('Unknown error')
             return -1
    
-    def execute(self, context):
-        """
-        Gets CoinAPI order book snapshots for tokens in DESIRED_TOKENS and stores them in S3.
-
-        Parameters:
-            context - Airflow context object
-
-        Returns:
-            None
-        """
-
-        # Delete order book data potentially stored in S3 from previous task runs
-        self.__delete_order_book_data_from_s3()
+    # Gets token metadata stored in S3
+    def _get_coinapi_metadata(self):
         
         # S3 key for token metadata (next scrape dates)
         key = 'eth_data/metadata/coinapi_pair_metadata.json'
@@ -229,30 +245,44 @@ class GetOrderBookDataOperator(BaseOperator):
         predicate = base_quote_exchange.isin(self.DESIRED_TOKENS)
         token_metadata_df = token_metadata_df[predicate]
 
-        # For each token in DESIRED_TOKENS
-        for i in range(len(token_metadata_df)):
+        return token_metadata_df
 
-            # List of order book snapshots for current token
-            order_book_snapshots = []
+    def execute(self, context):
+        """
+        Gets CoinAPI order book snapshots for tokens in DESIRED_TOKENS and stores them in S3.
+
+        Parameters:
+            context - Airflow context object
+
+        Returns:
+            None
+        """
+
+        # Delete order book data potentially stored in S3 from previous task runs
+        self._delete_order_book_data_from_s3()
+    
+        # For each token in DESIRED_TOKENS
+        for i in range(len(self.token_metadata_df)):
 
             while True:
+
                 # Every time we have collected 24 * 30 order book snapshots (~1 month's worth of data)
-                if len(order_book_snapshots) % 24 * 30 == 0:
+                if len(self.order_book_snapshots) % 24 * 30 == 0:
                     
                     print('One month of data collected... uploading to S3 and updating metadata.')
                     print()
 
                     # Upload new order book snapshots to S3
-                    self.__upload_new_order_book_data(order_book_snapshots)
+                    self._upload_new_order_book_data(self.order_book_snapshots)
 
                     # Update token metadata stored in S3
-                    self.__upload_updated_coinapi_metadata(token_metadata_df)
+                    self._upload_updated_coinapi_metadata(self.token_metadata_df)
 
                     # Empty list of order book snapshots for current token
-                    order_book_snapshots = []
+                    self.order_book_snapshots = []
 
                 # Get token metadata for current token
-                coinapi_token = token_metadata_df.iloc[i]
+                coinapi_token = self.token_metadata_df.iloc[i]
 
                 print('{}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
                 print()
@@ -261,7 +291,7 @@ class GetOrderBookDataOperator(BaseOperator):
                 coinapi_symbol_id = coinapi_token['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote']
 
                 # Get the next date to scrape order book data for current token
-                time_start = self.__get_next_start_date(coinapi_token)
+                time_start = self._get_next_start_date(coinapi_token)
 
                 # If time_start is a date in the future
                 if pd.to_datetime(time_start) > pd.to_datetime('now'):
@@ -271,16 +301,16 @@ class GetOrderBookDataOperator(BaseOperator):
                     break
             
                 # Get order book snapshot on time_start for current token
-                order_book_snapshot = self.__get_order_book_snapshot(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
+                order_book_snapshot = self._get_order_book_snapshot(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
                 
                 # If request didn't succeed
                 if type(order_book_snapshot) == int:
 
                     # If we have exceeded our API key rate limits then update token metadata stored in
-                    # S3, upload new data collected thus far to S3, and stop this tas
+                    # S3, upload new data collected thus far to S3, and stop this task
                     if order_book_snapshot == 429:
-                        self.__upload_new_order_book_data(order_book_snapshots)
-                        self.__upload_updated_coinapi_metadata(token_metadata_df)
+                        self._upload_new_order_book_data(self.order_book_snapshots)
+                        self._upload_updated_coinapi_metadata(self.token_metadata_df)
                         return
 
                     # Else just proceed to the next token
@@ -301,17 +331,17 @@ class GetOrderBookDataOperator(BaseOperator):
                         print('Data returned for ({})... continuing to next request.'.format(time_start))
                         
                         # Add to list of order book snapshots for current token
-                        order_book_snapshots.extend(order_book_snapshot)
+                        self.order_book_snapshots.extend(order_book_snapshot)
 
                         # Update metadata for this token locally
-                        token_metadata_df = self.__update_coinapi_metadata(
+                        self.token_metadata_df = self._update_coinapi_metadata(
                             time_start,
-                            token_metadata_df,
+                            self.token_metadata_df,
                             coinapi_token
                         )
 
             # Upload new order book data collected for current token to S3
-            self.__upload_new_order_book_data(order_book_snapshots)
+            self._upload_new_order_book_data(self.order_book_snapshots)
 
             # Update token metadata stored in S3
-            self.__upload_updated_coinapi_metadata(token_metadata_df)
+            self._upload_updated_coinapi_metadata(self.token_metadata_df)
