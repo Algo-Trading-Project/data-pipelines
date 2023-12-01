@@ -337,6 +337,17 @@ class GetOrderBookDataOperator(BaseOperator):
 
             while True:
 
+                # Every time we collect at least 24 * 30 = 720 (~1 month) order
+                # book snapshots for current token
+                if len(self.order_book_snapshots) >= 24 * 30:
+
+                    self.log.info('Collected ~1 month of order book snapshots for current token... syncing data with S3.')
+                    self.log.info('')
+
+                    # Sync collected data and updated metadata with S3 and continue processing
+                    self._sync_data_with_s3()
+                    continue
+
                 # Get CoinAPI symbol ID for current token
                 coinapi_symbol_id = coinapi_token['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote']
 
