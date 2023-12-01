@@ -13,7 +13,10 @@ import dateutil.parser as parser
 
 class GetOrderBookDataOperator(BaseOperator):
     """
-    Operator that gets CoinAPI order book snapshots for tokens in DESIRED_TOKENS and stores them in S3.
+    Custom Airflow operator to fetch and store CoinAPI order book snapshots for specified tokens in Amazon S3.
+
+    This operator retrieves order book data for a predefined list of tokens (`DESIRED_TOKENS`) and stores 
+    the data in an S3 bucket. It includes mechanisms for handling failures, retries, and data synchronization.
     """
     
     # List of tokens to get order book data for
@@ -33,7 +36,7 @@ class GetOrderBookDataOperator(BaseOperator):
         # File chunk number for order book data
         self.s3_file_chunk_num = 1
 
-        # List of order book snapshots for current token
+        # List of order book snapshots
         self.order_book_snapshots = []
 
         # Token metadata stored in S3
@@ -42,10 +45,13 @@ class GetOrderBookDataOperator(BaseOperator):
     @staticmethod
     def on_task_failure(context):
         """
-        Callback function that gets called if an instance of this task fails.
+        Callback function to handle task failure. It uploads any collected data and updates metadata on S3.
+
+        This method is automatically invoked by Airflow upon the failure of the task. It ensures that any 
+        data collected before the failure is saved to S3 and that the token metadata in S3 is updated.
 
         Parameters:
-            context - Airflow context object
+            context (dict): The Airflow context object containing runtime information.
 
         Returns:
             None
@@ -58,50 +64,69 @@ class GetOrderBookDataOperator(BaseOperator):
         operator_instance._upload_new_order_book_data()
 
         # Update token metadata stored in S3 with new scrape dates
-        operator_instance._upload_updated_coinapi_metadata()
+        operator_instance._upload_coinapi_metadata()
 
-    # Gets the next 10 valid start dates to scrape order book data for current token
     def _get_next_start_dates(self, coinapi_token):
+            """
+            Calculates the next set of start dates for scraping order book data for a given token.
 
-        # Round pandas datetime object t up to the nearest hour
-        def hour_rounder(t):
-            rounded_hour = t.replace(second=0, microsecond=0, minute=0, hour=t.hour) + timedelta(hours=1)
-            return rounded_hour.strftime('%Y-%m-%d %H:%M:%S')
+            This method generates a list of the next ten valid start dates, considering the most recent scrape date. 
+            It ensures that the dates are rounded to the nearest hour and are within the current UTC time.
 
-        # Get the next date to scrape order book data for current token
-        next_start_date = coinapi_token['latest_scrape_date_orderbook']
+            Parameters:
+                coinapi_token (pandas.Series): A pandas Series containing metadata for a specific token.
 
-        # If we have never scraped order book data for this token before
-        if pd.isnull(next_start_date):
+            Returns:
+                list of str: A list of ISO 8601 formatted start dates.
+            """
+            
+            # Round pandas datetime object t up to the nearest hour
+            def hour_rounder(t):
+                rounded_hour = t.replace(second=0, microsecond=0, minute=0, hour=t.hour) + timedelta(hours=1)
+                return rounded_hour.strftime('%Y-%m-%d %H:%M:%S')
 
-            # Get the date of the first order book snapshot for this token
-            next_start_date = pd.to_datetime(coinapi_token['data_orderbook_start'])
+            # Get the next date to scrape order book data for current token
+            next_start_date = coinapi_token['latest_scrape_date_orderbook']
 
-            # Round the date up to the nearest hour
-            next_start_date = hour_rounder(next_start_date)
+            # If we have never scraped order book data for this token before
+            if pd.isnull(next_start_date):
 
-            # Convert the date to ISO 8601 format
-            next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
+                # Get the date of the first order book snapshot for this token
+                next_start_date = pd.to_datetime(coinapi_token['data_orderbook_start'])
 
-            # Get the next 10 valid start dates separated by an hour
-            next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
-            next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
+                # Round the date up to the nearest hour
+                next_start_date = hour_rounder(next_start_date)
 
-        # If we have scraped order book data for this token before
-        else:
+                # Convert the date to ISO 8601 format
+                next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
 
-            # Convert the date to ISO 8601 format
-            next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
+                # Get the next 10 valid start dates separated by an hour
+                next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
+                next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
 
-            # Get the next 10 start dates separated by an hour
-            next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
-            next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
+            # If we have scraped order book data for this token before
+            else:
 
-        return next_start_dates
-    
-    # Uploads new order book data to S3
+                # Convert the date to ISO 8601 format
+                next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
+
+                # Get the next 10 start dates separated by an hour
+                next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
+                next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
+
+            return next_start_dates
+ 
     def _upload_new_order_book_data(self):
-        
+        """
+        Uploads newly collected order book data to S3.
+
+        This method converts the order book data to JSON format and uploads it to a specified S3 bucket. 
+        It handles the process of chunking data and managing file names for storage.
+
+        Returns:
+            None
+        """
+
         # If there is no new order book data to upload then return
         if len(self.order_book_snapshots) == 0:
             return
@@ -120,9 +145,16 @@ class GetOrderBookDataOperator(BaseOperator):
         # Increment file chunk number
         self.s3_file_chunk_num += 1
 
-    # Uploads updated token metadata to S3
-    def _upload_updated_coinapi_metadata(self):
-        
+    def _upload_coinapi_metadata(self):
+        """
+        Uploads updated token metadata to S3.
+
+        Converts the updated token metadata DataFrame to JSON and uploads it to a specific S3 bucket. 
+        This ensures that the metadata in S3 is always in sync with the latest scrape dates.
+
+        Returns:
+            None
+        """
         # Convert updated token metadata DF to JSON
         token_metadata_df_json = self.token_metadata_df.to_dict(orient = 'records')
         token_metadata_str = json.dumps(token_metadata_df_json)
@@ -135,22 +167,44 @@ class GetOrderBookDataOperator(BaseOperator):
             replace = True
         )
 
-    # Updates next scrape date for current token locally
     def _update_coinapi_metadata(self, time_start, coinapi_token):
-        asset_id_base = coinapi_token['asset_id_base']
-        asset_id_quote = coinapi_token['asset_id_quote']
-        exchange_id = coinapi_token['exchange_id']
+            """
+            Updates the next scrape date for a token in the local metadata.
 
-        # Next scrape date is one hour after the current scrape date
-        next_scrape_date = str(pd.to_datetime(time_start) + pd.Timedelta(hours = 1))
-        next_scrape_date = parser.parse(next_scrape_date).isoformat()
+            This method modifies the metadata DataFrame to reflect the next scrape date for a particular token, 
+            based on the most recent successful data retrieval.
 
-        # Update next scrape date for current token locally
-        predicate = (self.token_metadata_df['exchange_id'] == exchange_id) & (self.token_metadata_df['asset_id_base'] == asset_id_base) & (self.token_metadata_df['asset_id_quote'] == asset_id_quote)
-        self.token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
+            Parameters:
+                time_start (str): The start time of the most recent successful data retrieval.
+                
+                coinapi_token (pandas.Series): A pandas Series containing metadata for a specific token.
+
+            Returns:
+                None
+            """
+
+            asset_id_base = coinapi_token['asset_id_base']
+            asset_id_quote = coinapi_token['asset_id_quote']
+            exchange_id = coinapi_token['exchange_id']
+
+            # Next scrape date is one hour after the current scrape date
+            next_scrape_date = str(pd.to_datetime(time_start) + pd.Timedelta(hours = 1))
+            next_scrape_date = parser.parse(next_scrape_date).isoformat()
+
+            # Update next scrape date for current token locally
+            predicate = (self.token_metadata_df['exchange_id'] == exchange_id) & (self.token_metadata_df['asset_id_base'] == asset_id_base) & (self.token_metadata_df['asset_id_quote'] == asset_id_quote)
+            self.token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
     
-    # Deletes order book data from S3
     def _delete_order_book_data_from_s3(self):
+        """
+        Deletes existing order book data from S3.
+
+        This method is used to clear out any existing order book data from the specified S3 bucket, 
+        typically run before initiating a new data retrieval task.
+
+        Returns:
+            None
+        """
 
         # Get keys for order book data stored in S3
         keys_to_delete = self.s3_connection.list_keys(
@@ -164,9 +218,22 @@ class GetOrderBookDataOperator(BaseOperator):
             keys = keys_to_delete
         )
         
-    # Gets order book snapshot from CoinAPI for a given token and date
     def _get_order_book_snapshot(self, coinapi_symbol_id, time_start):
-        
+        """
+        Retrieves a single order book snapshot from CoinAPI for a given token and time.
+
+        Sends a request to the CoinAPI to fetch the order book data for a specific cryptocurrency token at 
+        a given time. Handles various HTTP response statuses to identify successful and failed requests.
+
+        Parameters:
+            coinapi_symbol_id (str): The identifier for the cryptocurrency symbol in CoinAPI.
+
+            time_start (str): The start time for the data request in ISO 8601 format.
+
+        Returns:
+            list or int: A list of a single order book snapshot if successful, otherwise an error code.
+        """
+
         # Formats response data from CoinAPI
         def format_response_data(response):
             exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
@@ -219,9 +286,28 @@ class GetOrderBookDataOperator(BaseOperator):
         else:
             return -1
    
-    # Concurrently gets order book snapshots from CoinAPI for a given token and date
     def _get_order_book_snapshots_concurrently(self, coinapi_symbol_id, start_times, max_retries = 1):
-        
+        """
+        Concurrently retrieves order book snapshots from CoinAPI for a given cryptocurrency symbol 
+        and a list of start times.
+
+        This method manages concurrent requests to CoinAPI for multiple timestamps, 
+        handling failures and retries. It's designed to efficiently gather large volumes of data.
+
+        Parameters:
+            coinapi_symbol_id (str): The symbol identifier for the cryptocurrency.
+
+            start_times (list of str): Timestamps for which to get order book snapshots.
+
+            max_retries (int, optional): Maximum number of retries for failed requests. Defaults to 1.
+
+        Returns:
+            list: A list of order book snapshots.
+
+        Raises:
+            Exception: Specific exceptions are raised and logged if API requests fail after retries.
+        """
+
         # List of order book snapshots
         results = []
 
@@ -252,6 +338,7 @@ class GetOrderBookDataOperator(BaseOperator):
                     else:
                         results.extend(result)
 
+                # If the request failed then add it to the list of failed requests
                 except Exception as e:
                     failed_requests.add(api_request_time)
 
@@ -283,9 +370,18 @@ class GetOrderBookDataOperator(BaseOperator):
 
         return results
 
-    # Gets token metadata stored in S3
     def _get_coinapi_metadata(self):
-        
+        """
+        Fetches and filters the token metadata from an S3 bucket.
+
+        This method reads the metadata for all tokens from a specified S3 bucket. It then filters this metadata 
+        to include only the tokens listed in `DESIRED_TOKENS`. The metadata includes various details of the tokens, 
+        such as asset IDs, exchange IDs, and the latest scrape dates for order book data.
+
+        Returns:
+            pandas.DataFrame: A DataFrame containing filtered metadata for the desired tokens.
+        """
+
         # S3 key for token metadata (next scrape dates)
         key = 'eth_data/metadata/coinapi_pair_metadata.json'
 
@@ -301,24 +397,37 @@ class GetOrderBookDataOperator(BaseOperator):
 
         return token_metadata_df
 
-    # Uploads new order book data collected for current token to S3 and updates token metadata in S3
     def _sync_data_with_s3(self):
+        """
+        Synchronizes collected order book data and updated metadata with S3.
+
+        This method handles the uploading of newly collected order book data for the current token to S3. 
+        It also updates the token metadata stored in S3 to reflect the most recent data retrieval activities. 
+        After syncing, it clears the local list of order book snapshots.
+
+        Returns:
+            None
+        """
 
         # Upload new order book data collected for current token to S3
         self._upload_new_order_book_data()
 
         # Update token metadata stored in S3
-        self._upload_updated_coinapi_metadata()
+        self._upload_coinapi_metadata()
 
-        # Empty list of order book snapshots for current token
+        # Empty list of order book snapshots
         self.order_book_snapshots = []
-
+        
     def execute(self, context):
         """
-        Gets CoinAPI order book snapshots for tokens in DESIRED_TOKENS and stores them in S3.
+        Main execution function for the GetOrderBookDataOperator.
+
+        This method orchestrates the entire process of collecting and storing CoinAPI order book data for specified tokens. 
+        It involves deleting existing data from S3, iterating over each token to collect new data, handling data synchronization 
+        with S3, and ensuring continuous data retrieval until all required data points are collected or no more valid dates are available.
 
         Parameters:
-            context - Airflow context object
+            context (dict): The Airflow context object containing runtime information about the task.
 
         Returns:
             None
