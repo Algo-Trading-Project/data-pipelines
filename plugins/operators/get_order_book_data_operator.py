@@ -6,7 +6,6 @@ from datetime import timedelta, datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from plugins.utils.custom_log_filter import CustomLogFilter
 
-
 import requests as r
 import json
 import pandas as pd
