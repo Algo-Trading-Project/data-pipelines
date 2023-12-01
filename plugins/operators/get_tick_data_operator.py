@@ -51,17 +51,14 @@ class GetTickDataOperator(BaseOperator):
             replace = True
         )
 
-    def __update_coinapi_pairs_metadata(self, latest_tick_data_for_pair, coinapi_pairs_df, coinapi_pair):
+    def __update_coinapi_pairs_metadata(self, time_end, coinapi_pairs_df, coinapi_pair):
         asset_id_base = coinapi_pair['asset_id_base']
         asset_id_quote = coinapi_pair['asset_id_quote']
         exchange_id = coinapi_pair['exchange_id']
 
-        sort_key = lambda x: pd.to_datetime(x['time_exchange'])
-
-        element_w_latest_date = max(latest_tick_data_for_pair, key = sort_key)
-        new_latest_scrape_date = str(pd.to_datetime(element_w_latest_date['time_exchange']))
-        new_latest_scrape_date = parser.parse(new_latest_scrape_date).isoformat()
-
+        # The next start date is time_end
+        new_latest_scrape_date = time_end
+        
         predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
         coinapi_pairs_df.loc[predicate, 'latest_scrape_date_trade'] = new_latest_scrape_date
 
@@ -78,7 +75,7 @@ class GetTickDataOperator(BaseOperator):
             keys = keys_to_delete
         )
 
-    def __get_latest_tick_data(self, coinapi_symbol_id, time_start):
+    def __get_latest_tick_data(self, coinapi_symbol_id, time_start, time_end):
         def format_response_data(response):
             exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
 
@@ -89,13 +86,9 @@ class GetTickDataOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
-        headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
+        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}&apikey={}'.format(coinapi_symbol_id, time_start, time_end, Variable.get('COINAPI_API_KEY'))
         
-        response = r.get(
-            url = api_request_url,
-            headers = headers,
-        )
+        response = r.get(url = api_request_url)
 
         # Request successful
         if response.status_code == 200:
@@ -159,9 +152,16 @@ class GetTickDataOperator(BaseOperator):
 
                 # Get the latest date that was scraped for this pair
                 time_start = self.__get_next_start_date(coinapi_pair)
-
+                
+                # Increment time_start by 1 hour to get the next hour of data
+                time_end = str(parser.parse(time_start) + pd.Timedelta(hours = 1))
+                
                 # Get new data since the latest scrape date
-                latest_tick_data_for_token = self.__get_latest_tick_data(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
+                latest_tick_data_for_token = self.__get_latest_tick_data(
+                    coinapi_symbol_id = coinapi_symbol_id, 
+                    time_start = time_start, 
+                    time_end = time_end
+                )
                 
                 # If request didn't succeed
                 if type(latest_tick_data_for_token) == int:
@@ -195,7 +195,7 @@ class GetTickDataOperator(BaseOperator):
 
                         # Update token metadata for this pair locally
                         coinapi_pairs_df = self.__update_coinapi_pairs_metadata(
-                            latest_tick_data_for_token,
+                            time_end,
                             coinapi_pairs_df,
                             coinapi_pair
                         )

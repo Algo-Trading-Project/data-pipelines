@@ -18,7 +18,7 @@ class CustomLogFilter(logging.Filter):
         """
         Initialize the CustomLogFilter with a specified prefix.
 
-        Args:
+        Parameters:
             prefix (str): The prefix to filter log messages on. Log messages that start
                           with this prefix will be allowed through the filter, while
                           all others will be filtered out.
@@ -33,7 +33,7 @@ class CustomLogFilter(logging.Filter):
         If it does, the log record is allowed; otherwise, it is filtered out. This method 
         is automatically called by the logging framework and should not be called directly.
 
-        Args:
+        Parameters:
             record (logging.LogRecord): The log record to be evaluated by the filter.
 
         Returns:
