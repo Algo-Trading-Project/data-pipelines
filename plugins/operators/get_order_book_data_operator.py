@@ -3,8 +3,9 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 
 from datetime import timedelta, datetime
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from plugins.utils.custom_log_filter import CustomLogFilter
+
 
 import requests as r
 import json
@@ -26,9 +27,15 @@ class GetOrderBookDataOperator(BaseOperator):
         'XRP_USDT_BINANCE', 'MATIC_USDT_BINANCE', 'EOS_USD_COINBASE', 
         'ZRX_USD_COINBASE', 'LTC_USD_COINBASE', 'ATOM_USDT_BINANCE'
     ]
+
+    # Prefix to append to log messages
+    LOG_PREFIX = 'GetOrderBookDataOperator: '
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        # Add custom log filter to log
+        self.log.addFilter(CustomLogFilter(self.LOG_PREFIX))
     
         # S3 connection
         self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
@@ -366,7 +373,7 @@ class GetOrderBookDataOperator(BaseOperator):
         failed_requests = failed_requests - succesfully_retried_requests               
 
         for time in failed_requests:
-            self.log.error('Request for time ({}) failed after {} retries.'.format(time, max_retries))
+            self.log.error('GetOrderBookDataOperator: Request for time ({}) failed after {} retries.'.format(time, max_retries))
 
         return results
 
@@ -442,7 +449,7 @@ class GetOrderBookDataOperator(BaseOperator):
             # Get token metadata for current token
             coinapi_token = self.token_metadata_df.iloc[i]
 
-            self.log.info('{}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
+            self.log.info('GetOrderBookDataOperator: {}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
 
             while True:
 
@@ -450,8 +457,8 @@ class GetOrderBookDataOperator(BaseOperator):
                 # book snapshots for current token
                 if len(self.order_book_snapshots) >= 24 * 30:
 
-                    self.log.info('Collected ~1 month of order book snapshots for current token... syncing data with S3.')
-                    self.log.info('')
+                    self.log.info('GetOrderBookDataOperator: Collected ~1 month of order book snapshots for current token... syncing data with S3.')
+                    self.log.info('GetOrderBookDataOperator: ')
 
                     # Sync collected data and updated metadata with S3 and continue processing
                     self._sync_data_with_s3()
@@ -466,15 +473,15 @@ class GetOrderBookDataOperator(BaseOperator):
                 # If there are no more valid dates to scrape for current token
                 if len(next_start_dates) == 0:
 
-                    self.log.info('No more valid dates to scrape for current token... continuing to next token.')
-                    self.log.info('')
+                    self.log.info('GetOrderBookDataOperator: No more valid dates to scrape for current token... continuing to next token.')
+                    self.log.info('GetOrderBookDataOperator: ')
 
                     # Sync collected data and updated metadata with S3 and move on to next token
                     self._sync_data_with_s3()
                     break
 
-                self.log.info('******* Getting order book data from {} to {}'.format(next_start_dates[0], next_start_dates[-1]))
-                self.log.info('')
+                self.log.info('GetOrderBookDataOperator: ******* Getting order book data from {} to {}'.format(next_start_dates[0], next_start_dates[-1]))
+                self.log.info('GetOrderBookDataOperator: ')
             
                 # Concurrently get next 10 order book snapshots for current token
                 scraped_order_book_snapshots = self._get_order_book_snapshots_concurrently(coinapi_symbol_id, next_start_dates)
@@ -482,8 +489,8 @@ class GetOrderBookDataOperator(BaseOperator):
                 # If request failed
                 if len(scraped_order_book_snapshots) == 0:
 
-                    self.log.info('Request failed... continuing to next token.')
-                    self.log.info('')
+                    self.log.info('GetOrderBookDataOperator: Request failed... continuing to next token.')
+                    self.log.info('GetOrderBookDataOperator: ')
 
                     # Sync collected data and updated metadata with S3 and move on to next token
                     self._sync_data_with_s3()
