@@ -2,7 +2,9 @@ from airflow.models import BaseOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 
-from datetime import timedelta
+from datetime import timedelta, datetime
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests as r
 import json
@@ -53,46 +55,59 @@ class GetOrderBookDataOperator(BaseOperator):
         operator_instance = context['task_instance'].task
         
         # Upload any data collected before the task failed to S3
-        operator_instance._upload_new_order_book_data(operator_instance.order_book_snapshots)
+        operator_instance._upload_new_order_book_data()
 
         # Update token metadata stored in S3 with new scrape dates
-        operator_instance._upload_updated_coinapi_metadata(operator_instance.token_metadata_df)
+        operator_instance._upload_updated_coinapi_metadata()
 
-    # Gets the next date to scrape order book data for current token
-    def _get_next_start_date(self, coinapi_token):
+    # Gets the next 10 valid start dates to scrape order book data for current token
+    def _get_next_start_dates(self, coinapi_token):
+
+        # Round pandas datetime object t up to the nearest hour
         def hour_rounder(t):
-            # Round pandas datetime object t up to the nearest hour
-            rounded_hour = t.replace(second = 0, microsecond = 0, minute = 0, hour = t.hour) + timedelta(hours = 1)
+            rounded_hour = t.replace(second=0, microsecond=0, minute=0, hour=t.hour) + timedelta(hours=1)
             return rounded_hour.strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # Get the next date to scrape order book data for current token
         next_start_date = coinapi_token['latest_scrape_date_orderbook']
 
         # If we have never scraped order book data for this token before
         if pd.isnull(next_start_date):
+
             # Get the date of the first order book snapshot for this token
             next_start_date = pd.to_datetime(coinapi_token['data_orderbook_start'])
+
             # Round the date up to the nearest hour
             next_start_date = hour_rounder(next_start_date)
+
             # Convert the date to ISO 8601 format
             next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
-        
+
+            # Get the next 10 valid start dates separated by an hour
+            next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
+            next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
+
         # If we have scraped order book data for this token before
         else:
+
             # Convert the date to ISO 8601 format
             next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
 
-        return next_start_date
+            # Get the next 10 start dates separated by an hour
+            next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
+            next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
 
+        return next_start_dates
+    
     # Uploads new order book data to S3
-    def _upload_new_order_book_data(self, new_order_book_data):
+    def _upload_new_order_book_data(self):
         
         # If there is no new order book data to upload then return
-        if len(new_order_book_data) == 0:
+        if len(self.order_book_snapshots) == 0:
             return
         
         # Else upload new order book data to S3
-        data_to_uplaod = json.dumps(new_order_book_data).replace('[', '').replace(']', '').replace('},', '}')
+        data_to_uplaod = json.dumps(self.order_book_snapshots).replace('[', '').replace(']', '').replace('},', '}')
         key = 'eth_data/order_book_data/coinapi_pair_order_book_snapshot_1_hour.json.{}'.format(self.s3_file_chunk_num)
 
         self.s3_connection.load_string(
@@ -106,10 +121,10 @@ class GetOrderBookDataOperator(BaseOperator):
         self.s3_file_chunk_num += 1
 
     # Uploads updated token metadata to S3
-    def _upload_updated_coinapi_metadata(self, token_metadata_df):
+    def _upload_updated_coinapi_metadata(self):
         
         # Convert updated token metadata DF to JSON
-        token_metadata_df_json = token_metadata_df.to_dict(orient = 'records')
+        token_metadata_df_json = self.token_metadata_df.to_dict(orient = 'records')
         token_metadata_str = json.dumps(token_metadata_df_json)
 
         # Upload updated token metadata to S3
@@ -121,7 +136,7 @@ class GetOrderBookDataOperator(BaseOperator):
         )
 
     # Updates next scrape date for current token locally
-    def _update_coinapi_metadata(self, time_start, token_metadata_df, coinapi_token):
+    def _update_coinapi_metadata(self, time_start, coinapi_token):
         asset_id_base = coinapi_token['asset_id_base']
         asset_id_quote = coinapi_token['asset_id_quote']
         exchange_id = coinapi_token['exchange_id']
@@ -131,11 +146,8 @@ class GetOrderBookDataOperator(BaseOperator):
         next_scrape_date = parser.parse(next_scrape_date).isoformat()
 
         # Update next scrape date for current token locally
-        predicate = (token_metadata_df['exchange_id'] == exchange_id) & (token_metadata_df['asset_id_base'] == asset_id_base) & (token_metadata_df['asset_id_quote'] == asset_id_quote)
-        token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
-
-        # Return updated token metadata DF
-        return token_metadata_df
+        predicate = (self.token_metadata_df['exchange_id'] == exchange_id) & (self.token_metadata_df['asset_id_base'] == asset_id_base) & (self.token_metadata_df['asset_id_quote'] == asset_id_quote)
+        self.token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
     
     # Deletes order book data from S3
     def _delete_order_book_data_from_s3(self):
@@ -171,64 +183,106 @@ class GetOrderBookDataOperator(BaseOperator):
 
         # Make request to CoinAPI
         api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}&apikey={}'.format(coinapi_symbol_id, time_start, 1, Variable.get('COINAPI_API_KEY'))
-
-        print('API Request URL: {}'.format(api_request_url))
-        print()
-        print()
         
         try:
             response = r.get(url = api_request_url)
-            print(response.json())
-            print()
         except:
-            print('An error occurred while making the request')
-            print()
             return -1
 
         # Request successful
         if response.status_code == 200:
-            print('Request Successful')
-            print()
-
             response_json = response.json()
             formatted_response = format_response_data(response_json)
             return formatted_response
         
         # Bad Request -- There is something wrong with your request
         elif response.status_code == 400:
-            print('Bad Request -- There is something wrong with your request')
-            print()
             return response.status_code
         
         # Unauthorized -- Your API key is wrong
         elif response.status_code == 401:
-            print('Unauthorized -- Your API key is wrong')
-            print()
             return response.status_code
         
         # Forbidden -- Your API key doesnt't have enough privileges to access this resource
         elif response.status_code == 403:
-            print("Forbidden -- Your API key doesn't have enough privileges to access this resource")
-            print()
             return response.status_code
         
         # Too many requests -- You have exceeded your API key rate limits
         elif response.status_code == 429:
-            print('Too many requests -- You have exceeded your API key rate limits')
-            print()
             return response.status_code
 
         # No data -- You requested specific single item that we don't have at this moment.
         elif response.status_code == 550:
-            print("No data -- You requested specific single item that we don't have at this moment.")
-            print()
             return response.status_code
         
         # Unknown error
         else:
-            print('Unknown error')
             return -1
    
+    # Concurrently gets order book snapshots from CoinAPI for a given token and date
+    def _get_order_book_snapshots_concurrently(self, coinapi_symbol_id, start_times, max_retries = 1):
+        
+        # List of order book snapshots
+        results = []
+
+        # Set of failed requests
+        failed_requests = set()
+
+        with ThreadPoolExecutor(max_workers = 10) as executor:
+
+            # Submit the tasks and create a mapping of futures to api request timestamps
+            futures = [executor.submit(self._get_order_book_snapshot, coinapi_symbol_id, start_time) for start_time in start_times]
+            future_to_time = {future: start_time for future, start_time in zip(futures, start_times)}
+            
+            # As each future completes
+            for future in as_completed(futures):
+
+                # Get the api request timestamp for this future
+                api_request_time = future_to_time[future]
+
+                try:
+                    # Get the result of the future
+                    result = future.result()
+
+                    # If the request failed then add it to the list of failed requests
+                    if isinstance(result, int):
+                        failed_requests.add(api_request_time)
+
+                    # If the request succeeded then add the result to the list of results
+                    else:
+                        results.extend(result)
+
+                except Exception as e:
+                    failed_requests.add(api_request_time)
+
+        # Retry logic for failed requests (without concurrency)
+
+        # Set of succesfully retried requests
+        succesfully_retried_requests = set()
+        
+        # Retry failed requests up to max_retries times
+        for time in failed_requests:
+            for _ in range(max_retries):
+                try:
+                    result = self._get_order_book_snapshot(coinapi_symbol_id, time)
+                    if isinstance(result, int):
+                        continue
+                    else:
+                        results.extend(result)
+                        succesfully_retried_requests.add(time)
+                        break
+
+                except Exception as e:
+                    continue 
+
+        # Remove succesfully retried requests from failed requests (set difference)
+        failed_requests = failed_requests - succesfully_retried_requests               
+
+        for time in failed_requests:
+            self.log.error('Request for time ({}) failed after {} retries.'.format(time, max_retries))
+
+        return results
+
     # Gets token metadata stored in S3
     def _get_coinapi_metadata(self):
         
@@ -247,6 +301,18 @@ class GetOrderBookDataOperator(BaseOperator):
 
         return token_metadata_df
 
+    # Uploads new order book data collected for current token to S3 and updates token metadata in S3
+    def _sync_data_with_s3(self):
+
+        # Upload new order book data collected for current token to S3
+        self._upload_new_order_book_data()
+
+        # Update token metadata stored in S3
+        self._upload_updated_coinapi_metadata()
+
+        # Empty list of order book snapshots for current token
+        self.order_book_snapshots = []
+
     def execute(self, context):
         """
         Gets CoinAPI order book snapshots for tokens in DESIRED_TOKENS and stores them in S3.
@@ -264,84 +330,50 @@ class GetOrderBookDataOperator(BaseOperator):
         # For each token in DESIRED_TOKENS
         for i in range(len(self.token_metadata_df)):
 
+            # Get token metadata for current token
+            coinapi_token = self.token_metadata_df.iloc[i]
+
+            self.log.info('{}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
+
             while True:
 
-                # Every time we have collected 24 * 30 order book snapshots (~1 month's worth of data)
-                if len(self.order_book_snapshots) % 24 * 30 == 0:
-                    
-                    print('One month of data collected... uploading to S3 and updating metadata.')
-                    print()
-
-                    # Upload new order book snapshots to S3
-                    self._upload_new_order_book_data(self.order_book_snapshots)
-
-                    # Update token metadata stored in S3
-                    self._upload_updated_coinapi_metadata(self.token_metadata_df)
-
-                    # Empty list of order book snapshots for current token
-                    self.order_book_snapshots = []
-
-                # Get token metadata for current token
-                coinapi_token = self.token_metadata_df.iloc[i]
-
-                print('{}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
-                print()
-                
                 # Get CoinAPI symbol ID for current token
                 coinapi_symbol_id = coinapi_token['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote']
 
-                # Get the next date to scrape order book data for current token
-                time_start = self._get_next_start_date(coinapi_token)
+                # Get the next 10 valid dates to scrape order book data for current token
+                next_start_dates = self._get_next_start_dates(coinapi_token)
 
-                # If time_start is a date in the future
-                if pd.to_datetime(time_start) > pd.to_datetime('now'):
-                    # Stop scraping order book data for current token
-                    print('time_start is a date in the future... continuing to next token.')
-                    print()
+                # If there are no more valid dates to scrape for current token
+                if len(next_start_dates) == 0:
+
+                    self.log.info('No more valid dates to scrape for current token... continuing to next token.')
+                    self.log.info('')
+
+                    # Sync collected data and updated metadata with S3 and move on to next token
+                    self._sync_data_with_s3()
                     break
+
+                self.log.info('******* Getting order book data from {} to {}'.format(next_start_dates[0], next_start_dates[-1]))
+                self.log.info('')
             
-                # Get order book snapshot on time_start for current token
-                order_book_snapshot = self._get_order_book_snapshot(coinapi_symbol_id = coinapi_symbol_id, time_start = time_start)
+                # Concurrently get next 10 order book snapshots for current token
+                scraped_order_book_snapshots = self._get_order_book_snapshots_concurrently(coinapi_symbol_id, next_start_dates)
                 
-                # If request didn't succeed
-                if type(order_book_snapshot) == int:
+                # If request failed
+                if len(scraped_order_book_snapshots) == 0:
 
-                    # If we have exceeded our API key rate limits then update token metadata stored in
-                    # S3, upload new data collected thus far to S3, and stop this task
-                    if order_book_snapshot == 429:
-                        self._upload_new_order_book_data(self.order_book_snapshots)
-                        self._upload_updated_coinapi_metadata(self.token_metadata_df)
-                        return
+                    self.log.info('Request failed... continuing to next token.')
+                    self.log.info('')
 
-                    # Else just proceed to the next token
-                    else:
-                        break
+                    # Sync collected data and updated metadata with S3 and move on to next token
+                    self._sync_data_with_s3()
+                    break
 
                 # If request succeeded
                 else:
-
-                    # If request returned an empty response
-                    if len(order_book_snapshot) == 0:
-                        print('No data returned for request... continuing to next token.')
-                        print()
-                        break
                     
-                    # If request returned a non-empty response
-                    else:
-                        print('Data returned for ({})... continuing to next request.'.format(time_start))
-                        
-                        # Add to list of order book snapshots for current token
-                        self.order_book_snapshots.extend(order_book_snapshot)
+                    # Add to list of order book snapshots
+                    self.order_book_snapshots.extend(scraped_order_book_snapshots)
 
-                        # Update metadata for this token locally
-                        self.token_metadata_df = self._update_coinapi_metadata(
-                            time_start,
-                            self.token_metadata_df,
-                            coinapi_token
-                        )
-
-            # Upload new order book data collected for current token to S3
-            self._upload_new_order_book_data(self.order_book_snapshots)
-
-            # Update token metadata stored in S3
-            self._upload_updated_coinapi_metadata(self.token_metadata_df)
+                    # Update metadata for this token locally
+                    self._update_coinapi_metadata(next_start_dates[-1], coinapi_token)
