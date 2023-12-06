@@ -35,4 +35,5 @@ Data pipelines have the following file structure:
 └── requirements
     └── requirements.txt
 
-5 directories, 26 files```
+5 directories, 26 files
+```
