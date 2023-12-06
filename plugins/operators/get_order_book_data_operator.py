@@ -25,16 +25,10 @@ class GetOrderBookDataOperator(BaseOperator):
         'XRP_USDT_BINANCE', 'MATIC_USDT_BINANCE', 'EOS_USD_COINBASE', 
         'ZRX_USD_COINBASE', 'LTC_USD_COINBASE', 'ATOM_USDT_BINANCE'
     ]
-
-    # Prefix to append to log messages
-    LOG_PREFIX = 'GetOrderBookDataOperator: '
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Add custom log filter to log
-        self.log.addFilter(CustomLogFilter(self.LOG_PREFIX))
-    
         # S3 connection
         self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
 
