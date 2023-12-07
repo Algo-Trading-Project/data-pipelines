@@ -9,6 +9,7 @@ import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
+import redshift_connector
 
 class GetOrderBookDataOperator(BaseOperator):
     """
@@ -191,29 +192,71 @@ class GetOrderBookDataOperator(BaseOperator):
             predicate = (self.token_metadata_df['exchange_id'] == exchange_id) & (self.token_metadata_df['asset_id_base'] == asset_id_base) & (self.token_metadata_df['asset_id_quote'] == asset_id_quote)
             self.token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
     
-    def _delete_order_book_data_from_s3(self):
+    def _check_s3_for_existing_data(self):
         """
-        Deletes existing order book data from S3.
+        Checks S3 for existing order book data.
 
-        This method is used to clear out any existing order book data from the specified S3 bucket, 
-        typically run before initiating a new data retrieval task.
+        This method checks if there is any existing order book data in the specified S3 bucket. 
+        If there is, it uploads the data to Redshift and deletes it from S3.
 
         Returns:
             None
         """
 
         # Get keys for order book data stored in S3
-        keys_to_delete = self.s3_connection.list_keys(
+        keys = self.s3_connection.list_keys(
             bucket_name = 'project-poseidon-data',
             prefix = 'eth_data/order_book_data'
         )
 
-        # Delete order book data from S3
-        self.s3_connection.delete_objects(
-            bucket = 'project-poseidon-data', 
-            keys = keys_to_delete
-        )
+        # If there is no existing order book data in S3 then return
+        if len(keys) == 0:
+            return
+
+        # Else upload existing order book data to Redshift cluster
+        with redshift_connector.connect(
+            host = Variable.get('REDSHIFT_HOST'),
+            database = 'token_price',
+            user = Variable.get('REDSHIFT_USER'),
+            password = Variable.get('REDSHIFT_PASSWORD'),
+            port = Variable.get('REDSHIFT_PORT')
+        ) as conn:
         
+            with conn.cursor() as cursor:
+
+                aws_access_key_id = Variable.get('AWS_ACCESS_KEY_ID')
+                aws_secret_access_key = Variable.get('AWS_SECRET_ACCESS_KEY')
+
+                query = """
+                COPY coinapi.order_book_data_1h
+                FROM 's3://project-poseidon-data/eth_data/order_book_data'
+                WITH CREDENTIALS 
+                'aws_access_key_id={};aws_secret_access_key={}'
+                    json 'auto'
+                    TIMEFORMAT 'auto'
+                """.format(aws_access_key_id, aws_secret_access_key)
+
+                try:
+                    # Upload existing order book data to Redshift and commit
+                    cursor.execute(query)
+                    conn.commit()
+                
+                except Exception as e:
+                    self.log.error('GetOrderBookDataOperator: Error uploading existing order book data to Redshift: {}'.format(e))
+                    self.log.error('GetOrderBookDataOperator: ')
+                    
+                    raise Exception('GetOrderBookDataOperator: Error uploading existing order book data to Redshift: {}'.format(e))
+
+                else:
+                    self.log.info('GetOrderBookDataOperator: Successfully uploaded existing order book data to Redshift.')
+                    self.log.info('GetOrderBookDataOperator: ')
+
+                    # Delete existing order book data from S3
+                    self.s3_connection.delete_objects(
+                        bucket = 'project-poseidon-data', 
+                        keys = keys
+                    )
+
     def _get_order_book_snapshot(self, coinapi_symbol_id, time_start):
         """
         Retrieves a single order book snapshot from CoinAPI for a given token and time.
@@ -429,8 +472,8 @@ class GetOrderBookDataOperator(BaseOperator):
             None
         """
 
-        # Delete order book data potentially stored in S3 from previous task runs
-        self._delete_order_book_data_from_s3()
+        # Check S3 for existing order book data
+        self._check_s3_for_existing_data()
     
         # For each token in DESIRED_TOKENS
         for i in range(len(self.token_metadata_df)):

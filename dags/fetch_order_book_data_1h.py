@@ -5,6 +5,31 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 from datetime import timedelta
 import pendulum
 
+
+def on_task_success(context):
+    """
+    Deletes existing order book data from S3.
+
+    This method is used to clear out any existing order book data from the specified S3 bucket, 
+    typically run before initiating a new data retrieval task.
+
+    Returns:
+        None
+    """
+
+    # Get keys for order book data stored in S3
+    keys_to_delete = self.s3_connection.list_keys(
+        bucket_name = 'project-poseidon-data',
+        prefix = 'eth_data/order_book_data'
+    )
+
+    # Delete order book data from S3
+    self.s3_connection.delete_objects(
+        bucket = 'project-poseidon-data', 
+        keys = keys_to_delete
+    )
+
+
 schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(
     year = 2023,
@@ -44,7 +69,7 @@ with DAG(
         upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote', 'time_exchange', 'time_coinapi'],
         copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
         column_list = order_book_data_1h_cols,
-        execution_timeout = timedelta(minutes = 30)
+        on_success_callback = on_task_success
     )
 
     order_book_data_1h_to_s3 >> s3_order_book_data_1h_to_redshift
