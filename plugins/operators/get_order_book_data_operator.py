@@ -215,17 +215,16 @@ class GetOrderBookDataOperator(BaseOperator):
 
         # Else upload existing order book data to Redshift cluster
         with redshift_connector.connect(
-            host = Variable.get('REDSHIFT_HOST'),
+            host = Variable.get('redshift_host'),
             database = 'token_price',
-            user = Variable.get('REDSHIFT_USER'),
-            password = Variable.get('REDSHIFT_PASSWORD'),
-            port = Variable.get('REDSHIFT_PORT')
+            user = 'administrator',
+            password = Variable.get('redshift_password')
         ) as conn:
         
             with conn.cursor() as cursor:
 
-                aws_access_key_id = Variable.get('AWS_ACCESS_KEY_ID')
-                aws_secret_access_key = Variable.get('AWS_SECRET_ACCESS_KEY')
+                aws_access_key_id = Variable.get('aws_access_key_id')
+                aws_secret_access_key = Variable.get('aws_secret_access_key')
 
                 query = """
                 COPY coinapi.order_book_data_1h

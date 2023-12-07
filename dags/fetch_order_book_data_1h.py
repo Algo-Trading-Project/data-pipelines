@@ -10,8 +10,8 @@ def on_task_success(context):
     """
     Deletes existing order book data from S3.
 
-    This method is used to clear out any existing order book data from the specified S3 bucket, 
-    typically run before initiating a new data retrieval task.
+    This function is used to clear out any existing order book data from the specified S3 bucket, 
+    run after the data has been successfully loaded into Redshift.
 
     Returns:
         None
