@@ -53,6 +53,15 @@ class GetOrderBookDataOperator(BaseOperator):
         Returns:
             None
         """
+
+        print('Task failed')
+        print()
+
+        print('order book snapshots: ', len(self.order_book_snapshots))
+        print()
+
+        print('token_metadata_str: ', token_metadata_str)
+        print()
         
         # Access the operator instance via context
         operator_instance = context['task_instance'].task
@@ -123,6 +132,7 @@ class GetOrderBookDataOperator(BaseOperator):
         Returns:
             None
         """
+
 
         # If there is no new order book data to upload then return
         if len(self.order_book_snapshots) == 0:
@@ -529,6 +539,9 @@ class GetOrderBookDataOperator(BaseOperator):
 
                 # If request succeeded
                 else:
+
+                    print('GetOrderBookDataOperator: ({}/{}) order book snapshots collected for current token.'.format(len(scraped_order_book_snapshots), len(next_start_dates)))
+                    print()
                     
                     # Add to list of order book snapshots
                     self.order_book_snapshots.extend(scraped_order_book_snapshots)
