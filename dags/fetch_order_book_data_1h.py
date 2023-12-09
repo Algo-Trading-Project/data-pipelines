@@ -69,7 +69,8 @@ with DAG(
         upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote', 'time_exchange', 'time_coinapi'],
         copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
         column_list = order_book_data_1h_cols,
-        on_success_callback = on_task_success
+        on_success_callback = on_task_success,
+        execution_timeout = timedelta(minutes = 30)
     )
 
     order_book_data_1h_to_s3 >> s3_order_book_data_1h_to_redshift
