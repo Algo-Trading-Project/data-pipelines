@@ -66,11 +66,10 @@ with DAG(
         redshift_conn_id = 'token_price_database_conn',
         aws_conn_id = 's3_conn',
         method = 'UPSERT',
-        upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote', 'time_exchange', 'time_coinapi'],
+        upsert_keys = ['symbol_id', 'time_exchange', 'time_coinapi'],
         copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
         column_list = order_book_data_1h_cols,
-        on_success_callback = on_task_success,
-        execution_timeout = timedelta(minutes = 30)
+        on_success_callback = on_task_success
     )
 
     order_book_data_1h_to_s3 >> s3_order_book_data_1h_to_redshift
