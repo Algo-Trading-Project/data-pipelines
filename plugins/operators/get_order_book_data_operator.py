@@ -298,7 +298,6 @@ class GetOrderBookDataOperator(BaseOperator):
 
         # Make request to CoinAPI
         api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}&apikey={}'.format(coinapi_symbol_id, time_start, 1, Variable.get('COINAPI_API_KEY'))
-        print('GetOrderBookDataOperator: Requesting data from CoinAPI: {}'.format(api_request_url))
         
         try:
             response = r.get(url = api_request_url)
