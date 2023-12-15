@@ -313,26 +313,32 @@ class GetOrderBookDataOperator(BaseOperator):
         
         # Bad Request -- There is something wrong with your request
         elif response.status_code == 400:
+            print('GetOrderBookDataOperator: Bad request: {}'.format(response.json()))
             return response.status_code
         
         # Unauthorized -- Your API key is wrong
         elif response.status_code == 401:
+            print('GetOrderBookDataOperator: Unauthorized: {}'.format(response.json()))
             return response.status_code
         
         # Forbidden -- Your API key doesnt't have enough privileges to access this resource
         elif response.status_code == 403:
+            print('GetOrderBookDataOperator: Forbidden: {}'.format(response.json()))
             return response.status_code
         
         # Too many requests -- You have exceeded your API key rate limits
         elif response.status_code == 429:
+            print('GetOrderBookDataOperator: Too many requests: {}'.format(response.json()))
             return response.status_code
 
         # No data -- You requested specific single item that we don't have at this moment.
         elif response.status_code == 550:
+            print('GetOrderBookDataOperator: No data: {}'.format(response.json()))
             return response.status_code
         
         # Unknown error
         else:
+            print('GetOrderBookDataOperator: Unknown error: {}'.format(response.json()))
             return -1
    
     def _get_order_book_snapshots_concurrently(self, coinapi_symbol_id, start_times, max_retries = 1):
