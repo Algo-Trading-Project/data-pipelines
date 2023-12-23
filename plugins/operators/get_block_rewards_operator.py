@@ -6,6 +6,9 @@ from web3 import Web3
 import requests as r
 import json
 
+# TODO: Implement failure callback function
+
+# TODO: Update block rewards start and end block in Airflow
 class GetBlockRewardsOperator(BaseOperator):
 
     def __init__(self, **kwargs):
@@ -16,7 +19,10 @@ class GetBlockRewardsOperator(BaseOperator):
         self.start_block = int(Variable.get('block_rewards_start_block'))
         self.end_block = int(Variable.get('block_rewards_end_block'))
 
-        self.web3_instance = Web3(Web3.HTTPProvider(Variable.get('infura_endpoint')))
+        infura_endpoint = 'https://mainnet.infura.io/v3/{}'.format(Variable.get('infura_api_key'))
+        eth_node = Web3(Web3.HTTPProvider(infura_endpoint))
+        self.web3_instance = eth_node
+        
         self.counter = 0
 
     def update_start_and_end_block_airflow(self, start_block, end_block):
@@ -83,31 +89,52 @@ class GetBlockRewardsOperator(BaseOperator):
 
     def execute(self, context):
         start_block, end_block = self.start_block, self.end_block
-
         processed_block_rewards = []
+
+        self.log.info('GetBlockRewards: Processing blocks {} to {}'.format(start_block, end_block))
+        self.log.info('GetBlockRewards:')
 
         while True:
             if start_block >= end_block:
-                new_start_block = end_block + 1
-                new_end_block = min(new_start_block + 1000, self.web3_instance.eth.block_number)
+                self.log.info('GetBlockRewards: Stopping at block {}'.format(start_block))
+                self.log.info('GetBlockRewards:')
+
+                end_block = min(start_block, self.web3_instance.eth.block_number)
+
+                self.log.info('GetBlockRewards: Updating start and end block in Airflow')
+                self.log.info('GetBlockRewards: New start block - {}'.format(start_block))
+                self.log.info('GetBlockRewards: New end block - {}'.format(end_block))
+                self.log.info('GetBlockRewards:')
 
                 self.__upload_to_s3(processed_block_rewards)
-                self.update_start_and_end_block_airflow(new_start_block, new_end_block)
+                self.update_start_and_end_block_airflow(start_block, end_block)
 
                 return
 
             if len(processed_block_rewards) >= 10000:
+                self.log.info('GetBlockRewards: At least 10,000 elements collected. Uploading current data to S3')
+                self.log.info('GetBlockRewards:')
+
                 self.__upload_to_s3(processed_block_rewards)
                 self.update_start_and_end_block_airflow(start_block, end_block)
 
                 processed_block_rewards = []
 
+            self.log.info('GetBlockRewards: Processing blocks {} to {}'.format(start_block, end_block))
+            self.log.info('GetBlockRewards:')
+
             for block in range(start_block, end_block + 1):
                 block_rewards_data = self.__get_block_rewards_data(block)
 
-                if block_rewards_data == None:
+                if block_rewards_data is None:
+                    self.log.error('GetBlockRewards: Error getting block rewards data for block {}'.format(block))
+                    self.log.error('GetBlockRewards: New start block - {}'.format(block))
+                    self.log.error('GetBlockRewards: New end block - {}'.format(end_block))
+                    self.log.error('GetBlockRewards:')
+
                     self.__upload_to_s3(processed_block_rewards)
                     self.update_start_and_end_block_airflow(block, end_block)
+                    
                     return
             
                 processed_block_rewards.extend(block_rewards_data)

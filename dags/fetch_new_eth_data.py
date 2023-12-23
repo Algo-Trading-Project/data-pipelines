@@ -9,7 +9,8 @@ from datetime import timedelta
 import pendulum
 
 def update_start_and_end_block(end_block):
-    eth_node = Web3(Web3.HTTPProvider(Variable.get('infura_endpoint')))
+    infura_endpoint = 'https://mainnet.infura.io/v3/{}'.format(Variable.get('infura_api_key'))
+    eth_node = Web3(Web3.HTTPProvider(infura_endpoint))
     start_block = int(Variable.get('start_block'))
    
     print()
@@ -42,10 +43,12 @@ with DAG('fetch_new_eth_data',
           max_active_runs = 1
           ) as dag:
 
+    infura_endpoint = 'https://mainnet.infura.io/v3/{}'.format(Variable.get('infura_api_key'))
+
     eth_data_to_s3 = Web3AlchemyToS3Operator(
         task_id = 'get_eth_data',
         batch_size = 1000,
-        node_endpoint = Variable.get('infura_endpoint'),
+        node_endpoint = infura_endpoint,
         bucket_name = 'project-poseidon-data',
         is_historical_run = False,
         start_block_variable_name = 'start_block',

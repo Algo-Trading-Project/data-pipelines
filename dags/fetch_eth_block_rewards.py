@@ -40,7 +40,7 @@ with DAG(
         column_list = block_rewards_table_cols,
         copy_options = ["json 'auto'"],
         method = 'UPSERT',
-        upsert_keys = ['block_no', 'miner_address'],
+        upsert_keys = ['block_no', 'miner_address']
     )
 
     block_rewards_to_s3 >> s3_block_rewards_to_redshift

@@ -7,13 +7,19 @@ from web3 import Web3
 import requests as r
 import json
 
+# TODO: Implement failure callback function
+
+# TODO: Update gas used start and end block in Airflow
 class GetEthTransactionGasUsedOperator(BaseOperator):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.s3_connection = S3Hook(aws_conn_id='s3_conn')
-        self.web3_instance = Web3(Web3.HTTPProvider(Variable.get('infura_endpoint')))
+
+        infura_endpoint = 'https://mainnet.infura.io/v3/{}'.format(Variable.get('infura_api_key'))
+        eth_node = Web3(Web3.HTTPProvider(infura_endpoint))
+        self.web3_instance = eth_node
 
         self.start_block = int(Variable.get('transaction_gas_used_start_block'))
         self.end_block = int(Variable.get('transaction_gas_used_end_block'))
@@ -96,12 +102,22 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
 
     def execute(self, context):
         start_block, end_block = self.start_block, self.end_block
-
         processed_transaction_receipts = []
+
+        self.log.info('GetEthTransactionGasUsed: Processing blocks {} to {}'.format(start_block, end_block))
+        self.log.info('GetEthTransactionGasUsed:')
 
         while True:
             if start_block >= end_block:
+                self.log.info('Stopping at block {}'.format(start_block))
+                self.log.info('GetEthTransactionGasUsed:')
+
                 end_block = min(start_block, self.web3_instance.eth.block_number)
+
+                self.log.info('GetEthTransactionGasUsed: Updating start and end block in Airflow')
+                self.log.info('GetEthTransactionGasUsed: New start block - {}'.format(start_block))
+                self.log.info('GetEthTransactionGasUsed: New end block - {}'.format(end_block))
+                self.log.info('GetEthTransactionGasUsed:')
 
                 self.__upload_to_s3(processed_transaction_receipts)
                 self.__update_start_and_end_block_airflow(start_block, end_block)
@@ -109,17 +125,29 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 return
 
             if len(processed_transaction_receipts) >= 10000:
+                self.log.info('GetEthTransactionGasUsed: At least 10,000 elements collected. Uploading current data to S3')
+                self.log.info('GetEthTransactionGasUsed:')
+
                 self.__upload_to_s3(processed_transaction_receipts)
                 self.__update_start_and_end_block_airflow(start_block, end_block)
 
                 processed_transaction_receipts = []
 
+            self.log.info('GetEthTransactionGasUsed: Processing blocks {} to {}'.format(start_block, end_block))
+            self.log.info('GetEthTransactionGasUsed:')
+
             for block_num in range(start_block, end_block + 1):
                 transaction_receipts = self.__get_block_transaction_receipts(block_num)
 
                 if transaction_receipts is None:
+                    self.log.error('GetEthTransactionGasUsed: Error getting transaction receipts for block {}'.format(block_num))
+                    self.log.error('GetEthTransactionGasUsed: New start block - {}'.format(block_num))
+                    self.log.error('GetEthTransactionGasUsed: New end block - {}'.format(end_block))
+                    self.log.error('GetEthTransactionGasUsed:')
+
                     self.__upload_to_s3(processed_transaction_receipts)
                     self.__update_start_and_end_block_airflow(block_num, end_block)
+
                     return
 
                 for receipt in transaction_receipts:
