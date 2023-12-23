@@ -154,6 +154,8 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                         'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
                         'gas_used': int(receipt['gasUsed'], 16)
                     })
+
+                sleep(0.76)
                 
             start_block = end_block + 1
             end_block = min(start_block + 1000, self.web3_instance.eth.block_number)
