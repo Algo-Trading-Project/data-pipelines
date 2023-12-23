@@ -39,6 +39,7 @@ class GetOrderBookDataOperator(BaseOperator):
         # Token metadata stored in S3
         self.token_metadata_df = self._get_coinapi_metadata()
 
+    # TODO: Implement on_task_failure callback
     @staticmethod
     def on_task_failure(context):
         """
@@ -298,9 +299,14 @@ class GetOrderBookDataOperator(BaseOperator):
 
         # Make request to CoinAPI
         api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}&apikey={}'.format(coinapi_symbol_id, time_start, 1, Variable.get('COINAPI_API_KEY'))
+
+        print('API request URL: ', api_request_url)
+        print()
         
         try:
             response = r.get(url = api_request_url)
+            print('Response: ', response.json())
+            print()
         except:
             return -1
 
@@ -529,6 +535,8 @@ class GetOrderBookDataOperator(BaseOperator):
 
                 self.log.info('GetOrderBookDataOperator: ******* Getting order book data from {} to {}'.format(next_start_dates[0], next_start_dates[-1]))
                 self.log.info('GetOrderBookDataOperator: ')
+
+                #TODO: Add logging for number of order book snapshots collected
             
                 # Concurrently get next 10 order book snapshots for current token
                 scraped_order_book_snapshots = self._get_order_book_snapshots_concurrently(coinapi_symbol_id, next_start_dates)
