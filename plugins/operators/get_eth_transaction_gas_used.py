@@ -155,7 +155,5 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                         'gas_used': int(receipt['gasUsed'], 16)
                     })
                 
-                sleep(1)
-
             start_block = end_block + 1
             end_block = min(start_block + 1000, self.web3_instance.eth.block_number)
