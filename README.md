@@ -13,11 +13,6 @@ Data pipelines have the following file structure:
 │   ├── fetch_quote_data_1h.py
 │   ├── fetch_tick_data.py
 │   ├── fetch_token_prices_1h.py
-│   ├── stg_block_reward_to_prod.py
-│   ├── stg_block_to_prod.py
-│   ├── stg_gas_used_to_prod.py
-│   ├── stg_transaction_to_prod.py
-│   └── stg_transfer_to_prod.py
 ├── plugins
 │   ├── __init__.py
 │   ├── operators
@@ -35,5 +30,5 @@ Data pipelines have the following file structure:
 └── requirements
     └── requirements.txt
 
-5 directories, 26 files
+5 directories, 21 files
 ```
