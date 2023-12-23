@@ -9,7 +9,7 @@ from airflow.operators.python import PythonOperator
 from datetime import timedelta
 import pendulum
  
-schedule_interval = timedelta(minutes = 15)
+schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(year = 2022,
                                month = 4,
                                day = 14,
