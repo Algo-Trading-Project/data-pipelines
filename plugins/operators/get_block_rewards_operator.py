@@ -9,6 +9,8 @@ import json
 # TODO: Implement failure callback function
 
 # TODO: Update block rewards start and end block in Airflow
+
+# TODO: Improve error handling
 class GetBlockRewardsOperator(BaseOperator):
 
     def __init__(self, **kwargs):
@@ -91,10 +93,8 @@ class GetBlockRewardsOperator(BaseOperator):
         start_block, end_block = self.start_block, self.end_block
         processed_block_rewards = []
 
-        self.log.info('GetBlockRewards: Processing blocks {} to {}'.format(start_block, end_block))
-        self.log.info('GetBlockRewards:')
-
         while True:
+
             if start_block >= end_block:
                 self.log.info('GetBlockRewards: Stopping at block {}'.format(start_block))
                 self.log.info('GetBlockRewards:')
@@ -124,6 +124,8 @@ class GetBlockRewardsOperator(BaseOperator):
             self.log.info('GetBlockRewards:')
 
             for block in range(start_block, end_block + 1):
+                self.log.info('GetBlockRewards: Processing block {}...'.format(block))
+                self.log.info('GetBlockRewards:')
                 block_rewards_data = self.__get_block_rewards_data(block)
 
                 if block_rewards_data is None:

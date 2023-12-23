@@ -40,9 +40,9 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
 
         self.s3_connection.load_string(
             data_to_upload,
-            bucket_name='project-poseidon-data',
-            key=key,
-            replace=True
+            bucket_name = 'project-poseidon-data',
+            key = key,
+            replace = True
         )
 
         self.counter += 1
@@ -50,7 +50,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
     def __get_block_transaction_receipts(self, block_num):
         headers = {
             'accept': 'application/json',
-            'Content-Type': 'application/json'
+            'content-type': 'application/json'
         }
         
         params = {
@@ -66,11 +66,12 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
 
         while True:
             try:
+                request_url = 'https://eth-mainnet.g.alchemy.com/v2/{}'.format(Variable.get('alchemy_api_key'))
                 response = r.post(
-                    url = Variable.get('alchemy_api_endpoint'),
+                    url = request_url,
                     headers = headers,
-                    data = params
-                ).json()
+                    json = params
+                )
 
                 self.log.info('GetEthTransactionGasUsed: Status code - {}'.format(response.status_code))
                 self.log.info('GetEthTransactionGasUsed:')
@@ -83,12 +84,13 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 return None
 
             if response.status_code != 200:
-                self.log.error('GetEthTransactionGasUsed: Error - {}'.format(response.get('error')))
+                self.log.error('GetEthTransactionGasUsed: Error - {}'.format(response.json()))
                 self.log.error('GetEthTransactionGasUsed:')
 
                 return None
 
             else:
+                response = response.json()
                 request_result = response.get('result')
 
                 if request_result == None:
@@ -103,9 +105,6 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
     def execute(self, context):
         start_block, end_block = self.start_block, self.end_block
         processed_transaction_receipts = []
-
-        self.log.info('GetEthTransactionGasUsed: Processing blocks {} to {}'.format(start_block, end_block))
-        self.log.info('GetEthTransactionGasUsed:')
 
         while True:
             if start_block >= end_block:
@@ -154,7 +153,8 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     processed_transaction_receipts.append({
                         'transaction_hash': receipt['transactionHash'].lower(),
                         'block_no': int(receipt['blockNumber'], 16),
-                        'effective_gas_price': float(receipt['effectiveGasPrice']) / (10 ** 9),
+                        # Convert from wei to ether
+                        'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
                         'gas_used': int(receipt['gasUsed'], 16)
                     })
 
