@@ -10,7 +10,6 @@ Data pipelines have the following file structure:
 │   ├── fetch_eth_transaction_gas_used.py
 │   ├── fetch_new_eth_data.py
 │   ├── fetch_order_book_data_1h.py
-│   ├── fetch_quote_data_1h.py
 │   ├── fetch_tick_data.py
 │   ├── fetch_token_prices_1h.py
 ├── plugins
@@ -21,7 +20,6 @@ Data pipelines have the following file structure:
 │   │   ├── get_coinapi_prices_operator.py
 │   │   ├── get_eth_transaction_gas_used.py
 │   │   ├── get_order_book_data_operator.py
-│   │   ├── get_quote_data_operator.py
 │   │   ├── get_tick_data_operator.py
 │   │   ├── redshift_sql_operator.py
 │   │   └── web3_alchemy_to_s3_operator.py
@@ -30,5 +28,5 @@ Data pipelines have the following file structure:
 └── requirements
     └── requirements.txt
 
-5 directories, 21 files
+5 directories, 19 files
 ```
