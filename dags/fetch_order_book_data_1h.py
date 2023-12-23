@@ -5,7 +5,6 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 from datetime import timedelta
 import pendulum
 
-
 def on_task_success(context):
     """
     Deletes existing order book data from S3.
@@ -28,7 +27,6 @@ def on_task_success(context):
         bucket = 'project-poseidon-data', 
         keys = keys_to_delete
     )
-
 
 schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(

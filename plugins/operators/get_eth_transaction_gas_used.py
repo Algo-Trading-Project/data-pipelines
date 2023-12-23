@@ -2,6 +2,7 @@ from airflow.models import BaseOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 from time import sleep
+from web3 import Web3
 
 import requests as r
 import json
@@ -12,7 +13,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
         super().__init__(**kwargs)
 
         self.s3_connection = S3Hook(aws_conn_id='s3_conn')
-        self.web3_instance = Web3(Web3.HTTPProvider(Variable.get('infura_url')))
+        self.web3_instance = Web3(Web3.HTTPProvider(Variable.get('infura_endpoint')))
 
         self.start_block = int(Variable.get('transaction_gas_used_start_block'))
         self.end_block = int(Variable.get('transaction_gas_used_end_block'))

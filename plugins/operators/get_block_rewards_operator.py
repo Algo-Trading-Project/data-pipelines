@@ -16,7 +16,7 @@ class GetBlockRewardsOperator(BaseOperator):
         self.start_block = int(Variable.get('block_rewards_start_block'))
         self.end_block = int(Variable.get('block_rewards_end_block'))
 
-        self.web3_instance = Web3(Web3.HTTPProvider(Variable.get('infura_url')))
+        self.web3_instance = Web3(Web3.HTTPProvider(Variable.get('infura_endpoint')))
         self.counter = 0
 
     def update_start_and_end_block_airflow(self, start_block, end_block):

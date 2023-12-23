@@ -3,13 +3,12 @@ from airflow.models import Variable
 from operators.web3_alchemy_to_s3_operator import Web3AlchemyToS3Operator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 from airflow.operators.python import PythonOperator
-
+from web3 import Web3
 from datetime import timedelta
+
 import pendulum
 
 def update_start_and_end_block(end_block):
-    from web3 import Web3
-
     eth_node = Web3(Web3.HTTPProvider(Variable.get('infura_endpoint')))
     start_block = int(Variable.get('start_block'))
    
