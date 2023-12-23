@@ -9,32 +9,7 @@ from airflow.operators.python import PythonOperator
 from datetime import timedelta
 import pendulum
 
-def update_start_and_end_block():
-    from web3 import Web3
-    
-    web_provider = Web3.HTTPProvider(Variable.get('infura_endpoint'))
-    web3_instance = Web3(web_provider)
-
-    start_block = int(Variable.get('transaction_gas_used_start_block'))
-    end_block = int(Variable.get('transaction_gas_used_end_block'))
-
-    print()
-    print('start block: {}'.format(start_block))
-    print('end block: {}'.format(end_block))
-    print()
-
-    new_start_block = min(end_block + 1, web3_instance.eth.block_number)
-    new_end_block = min(new_start_block + 1000, web3_instance.eth.block_number)
-
-    Variable.set(key = 'transaction_gas_used_start_block', value = new_start_block)
-    Variable.set(key = 'transaction_gas_used_end_block', value = new_end_block)
-
-    print()
-    print('new start block: {}'.format(new_start_block))
-    print('new end block: {}'.format(new_end_block))
-    print()
-
-schedule_interval = timedelta(minutes = 15)
+schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(year = 2022,
                                month = 4,
                                day = 14,
@@ -48,35 +23,24 @@ with DAG(
     catchup = False,
     max_active_runs = 1
 ) as dag:
-    transaction_receipts_to_s3 = GetEthTransactionGasUsedOperator(
-        task_id = 'get_eth_transaction_gas_used',
-        retries = 3,
-        retry_delay = timedelta(minutes = 1)
+
+    gas_used_to_s3 = GetEthTransactionGasUsedOperator(
+        task_id = 'get_eth_transaction_gas_used'
     )
 
-    transaction_receipts_table_cols = ['transaction_hash', 'block_no', 'gas_used']
-    s3_transaction_receipts_to_redshift = S3ToRedshiftOperator(
+    gas_used_table_cols = ['transaction_hash', 'block_no', 'gas_used', 'effective_gas_price']
+    s3_gas_used_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_transaction_gas_used_to_redshift',
         schema = 'eth_data',
-        table = 'stg_gas_used',
+        table = 'gas_used',
         s3_bucket = 'project-poseidon-data',
-        s3_key = 'eth_data/transaction_gas_used_data/transaction_gas_used.json',
+        s3_key = 'eth_data/transaction_gas_used_data',
         redshift_conn_id = 'redshift_conn',
         aws_conn_id = 's3_conn',
-        column_list = transaction_receipts_table_cols,
+        column_list = gas_used_table_cols,
         copy_options = ["json 'auto'"],
         method = 'UPSERT',
-        upsert_keys = ['transaction_hash', 'block_no'],
-        retries = 3,
-        retry_delay = timedelta(minutes = 1)
+        upsert_keys = ['transaction_hash', 'block_no']
     )
 
-    finish = PythonOperator(
-        task_id = 'finish',
-        python_callable = update_start_and_end_block,
-        op_args = [],
-        retries = 3,
-        retry_delay = timedelta(minutes = 1)
-    )
-
-    transaction_receipts_to_s3 >> s3_transaction_receipts_to_redshift >> finish
+    gas_used_to_s3 >> s3_gas_used_to_redshift

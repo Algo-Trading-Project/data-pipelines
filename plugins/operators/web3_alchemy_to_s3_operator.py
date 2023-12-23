@@ -3,6 +3,8 @@ from airflow.models import BaseOperator
 from airflow.models import Variable
 from time import sleep
 from pendulum import datetime
+from web3 import Web3
+
 import datetime
 
 import requests as r
@@ -19,13 +21,17 @@ class Web3AlchemyToS3Operator(BaseOperator):
         self.is_historical_run = is_historical_run
 
         self.node_endpoint = node_endpoint
-        self.web3_instance = None
-
         self.bucket_name = bucket_name
-        self.s3_connection = None
 
         self.start_block_variable_name = start_block_variable_name
         self.end_block_variable_name = end_block_variable_name
+
+        web_provider = Web3.HTTPProvider(self.node_endpoint)
+        self.web3_instance = Web3(web_provider)
+
+        self.s3_connection = S3Hook(
+            aws_conn_id = 's3_conn'
+        )
 
     ############################ HELPER FUNCTIONS ##########################################
     def __get_start_and_end_block(self):
@@ -34,19 +40,9 @@ class Web3AlchemyToS3Operator(BaseOperator):
 
         return start_block, end_block
 
-    def __set_up_connections(self):
-        from web3 import Web3
-        
-        web_provider = Web3.HTTPProvider(self.node_endpoint)
-        self.web3_instance = Web3(web_provider)
-
-        self.s3_connection = S3Hook(
-            aws_conn_id = 's3_conn'
-        )
-
     def __get_transfer_data(self):
         start_block, end_block = self.__get_start_and_end_block()
-        ############################################ INTERNAL FUNC ############################################
+        ########################################### INTERNAL FUNC ############################################
         def get_transfer_data(page_key = None):
             headers = {'Content-Type':'application/json'}
 

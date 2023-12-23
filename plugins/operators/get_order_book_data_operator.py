@@ -39,7 +39,6 @@ class GetOrderBookDataOperator(BaseOperator):
         # Token metadata stored in S3
         self.token_metadata_df = self._get_coinapi_metadata()
 
-    # TODO: Implement on_task_failure callback
     @staticmethod
     def on_task_failure(context):
         """
