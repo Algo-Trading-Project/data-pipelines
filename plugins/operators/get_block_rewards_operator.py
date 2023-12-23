@@ -124,8 +124,6 @@ class GetBlockRewardsOperator(BaseOperator):
             self.log.info('GetBlockRewards:')
 
             for block in range(start_block, end_block + 1):
-                self.log.info('GetBlockRewards: Processing block {}...'.format(block))
-                self.log.info('GetBlockRewards:')
                 block_rewards_data = self.__get_block_rewards_data(block)
 
                 if block_rewards_data is None:

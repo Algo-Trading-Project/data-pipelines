@@ -73,10 +73,6 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     headers = headers,
                     json = params
                 )
-
-                self.log.info('GetEthTransactionGasUsed: Status code - {}'.format(response.status_code))
-                self.log.info('GetEthTransactionGasUsed:')
-
             except Exception as e:
                 self.log.error('GetEthTransactionGasUsed: Error getting transaction receipts for block {}'.format(block_num))
                 self.log.error('GetEthTransactionGasUsed: {}'.format(str(e)))
