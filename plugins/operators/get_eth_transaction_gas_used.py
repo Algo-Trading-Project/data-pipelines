@@ -3,6 +3,7 @@ from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 from time import sleep
 from web3 import Web3
+from time import sleep
 
 import requests as r
 import json
@@ -157,6 +158,8 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                         'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
                         'gas_used': int(receipt['gasUsed'], 16)
                     })
+                
+                sleep(1)
 
             start_block = end_block + 1
             end_block = min(start_block + 1000, self.web3_instance.eth.block_number)
