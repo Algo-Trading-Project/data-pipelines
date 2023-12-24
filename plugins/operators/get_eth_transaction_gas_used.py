@@ -99,63 +99,44 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     return request_result.get('receipts')
     ####### HELPER FUNCTIONS END ########
 
-    def execute(self, context):
-        start_block, end_block = self.start_block, self.end_block
-        processed_transaction_receipts = []
+def execute(self, context):
+    start_block, end_block = self.start_block, self.end_block
+    processed_transaction_receipts = []
 
-        while True:
-            if start_block >= end_block:
-                self.log.info('Stopping at block {}'.format(start_block))
-                self.log.info('GetEthTransactionGasUsed:')
+    while True:
+        if end_block <= start_block:
+            self.log.info('GetEthTransactionGasUsed: Reached the beginning of the chain at block {}'.format(start_block))
+            self.__upload_to_s3(processed_transaction_receipts)
+            return
 
-                end_block = min(start_block, self.web3_instance.eth.block_number)
+        if len(processed_transaction_receipts) >= 10000:
+            self.log.info('GetEthTransactionGasUsed: Uploading data to S3')
+            self.__upload_to_s3(processed_transaction_receipts)
+            self.__update_start_and_end_block_airflow(start_block, end_block)
+            processed_transaction_receipts = []
 
-                self.log.info('GetEthTransactionGasUsed: Updating start and end block in Airflow')
-                self.log.info('GetEthTransactionGasUsed: New start block - {}'.format(start_block))
-                self.log.info('GetEthTransactionGasUsed: New end block - {}'.format(end_block))
-                self.log.info('GetEthTransactionGasUsed:')
+        self.log.info(f'GetEthTransactionGasUsed: Processing blocks {end_block} to {start_block}')
+
+        for block_num in range(end_block, start_block - 1, -1):
+            transaction_receipts = self.__get_block_transaction_receipts(block_num)
+
+            if transaction_receipts is None:
+                self.log.error(f'GetEthTransactionGasUsed: Error getting transaction receipts for block {block_num}')
 
                 self.__upload_to_s3(processed_transaction_receipts)
-                self.__update_start_and_end_block_airflow(start_block, end_block)
+                self.__update_start_and_end_block_airflow(start_block, block_num)
 
                 return
 
-            if len(processed_transaction_receipts) >= 10000:
-                self.log.info('GetEthTransactionGasUsed: At least 10,000 elements collected. Uploading current data to S3')
-                self.log.info('GetEthTransactionGasUsed:')
-
-                self.__upload_to_s3(processed_transaction_receipts)
-                self.__update_start_and_end_block_airflow(start_block, end_block)
-
-                processed_transaction_receipts = []
-
-            self.log.info('GetEthTransactionGasUsed: Processing blocks {} to {}'.format(start_block, end_block))
-            self.log.info('GetEthTransactionGasUsed:')
-
-            for block_num in range(start_block, end_block + 1):
-                transaction_receipts = self.__get_block_transaction_receipts(block_num)
-
-                if transaction_receipts is None:
-                    self.log.error('GetEthTransactionGasUsed: Error getting transaction receipts for block {}'.format(block_num))
-                    self.log.error('GetEthTransactionGasUsed: New start block - {}'.format(block_num))
-                    self.log.error('GetEthTransactionGasUsed: New end block - {}'.format(end_block))
-                    self.log.error('GetEthTransactionGasUsed:')
-
-                    self.__upload_to_s3(processed_transaction_receipts)
-                    self.__update_start_and_end_block_airflow(block_num, end_block)
-
-                    return
-
-                for receipt in transaction_receipts:
-                    processed_transaction_receipts.append({
-                        'transaction_hash': receipt['transactionHash'].lower(),
-                        'block_no': int(receipt['blockNumber'], 16),
-                        # Convert from wei to ether
-                        'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
-                        'gas_used': int(receipt['gasUsed'], 16)
-                    })
-
-                sleep(0.76)
+            for receipt in transaction_receipts:
+                processed_transaction_receipts.append({
+                    'transaction_hash': receipt['transactionHash'].lower(),
+                    'block_no': int(receipt['blockNumber'], 16),
+                    'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
+                    'gas_used': int(receipt['gasUsed'], 16)
+                })
                 
-            start_block = end_block + 1
-            end_block = min(start_block + 1000, self.web3_instance.eth.block_number)
+            sleep(0.76)
+
+        end_block = start_block - 1
+        start_block = max(end_block - 1000, 0)
