@@ -8,9 +8,6 @@ from time import sleep
 import requests as r
 import json
 
-# TODO: Implement failure callback function
-
-# TODO: Update gas used start and end block in Airflow
 class GetEthTransactionReceiptsOperator(BaseOperator):
 
     def __init__(self, **kwargs):
@@ -146,17 +143,27 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
                     return
 
                 for receipt in transaction_receipts:
+                    
+                    transaction_hash = receipt['transactionHash'].lower() if receipt['transactionHash'] is not None else None
+                    block_no = int(receipt['blockNumber'], 16) if receipt['blockNumber'] is not None else None
+                    from_ = receipt['from'].lower() if receipt['from'] is not None else None
+                    to_ = receipt['to'].lower() if receipt['to'] is not None else None
+                    contract_address = receipt['contractAddress'].lower() if receipt['contractAddress'] is not None else None
+                    status = int(receipt['status']) if receipt['status'] is not None else None
+                    effective_gas_price = float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18) if receipt['effectiveGasPrice'] is not None else None
+                    gas_used = int(receipt['gasUsed'], 16) if receipt['gasUsed'] is not None else None
+                    type_ = receipt['type'] if receipt['type'] is not None else None
 
                     processed_transaction_receipts.append({
-                        'transaction_hash': receipt['transactionHash'].lower(),
-                        'block_no': int(receipt['blockNumber'], 16),
-                        'from_': receipt['from'].lower(),
-                        'to_': receipt['to'].lower(),
-                        'contract_address': receipt['contractAddress'].lower(),
-                        'status': int(receipt['status']),
-                        'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
-                        'gas_used': int(receipt['gasUsed'], 16),
-                        'type': receipt['type']
+                        'transaction_hash': transaction_hash,
+                        'block_no': block_no,
+                        'from': from_,
+                        'to': to_,
+                        'contract_address': contract_address,
+                        'status': status,
+                        'effective_gas_price': effective_gas_price,
+                        'gas_used': gas_used,
+                        'type': type_
                     })
                     
                 sleep(0.1)
