@@ -159,7 +159,7 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
                         'type': receipt['type']
                     })
                     
-                sleep(0.5)
+                sleep(0.1)
 
             end_block = start_block - 1
             start_block = max(end_block - 1000, 0)
