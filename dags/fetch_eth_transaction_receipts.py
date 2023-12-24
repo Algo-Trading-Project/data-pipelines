@@ -1,7 +1,7 @@
 from airflow import DAG
 from airflow.models import Variable
 
-from operators.get_eth_transaction_gas_used import GetEthTransactionReceiptsOperator
+from operators.get_eth_transaction_receipts import GetEthTransactionReceiptsOperator
 
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 from airflow.operators.python import PythonOperator
