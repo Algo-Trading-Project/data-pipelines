@@ -160,7 +160,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             return response
 
         api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1HRS&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
-        headers = {'X-CoinAPI-Key':Variable.get('coin_api_api_key')}
+        headers = {'X-CoinAPI-Key':Variable.get('coinapi_api_key')}
         
         try:
             response = r.get(

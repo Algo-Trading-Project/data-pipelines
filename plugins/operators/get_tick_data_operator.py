@@ -86,7 +86,7 @@ class GetTickDataOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}&apikey={}'.format(coinapi_symbol_id, time_start, time_end, Variable.get('COINAPI_API_KEY'))
+        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}&apikey={}'.format(coinapi_symbol_id, time_start, time_end, Variable.get('coinapi_api_key'))
         
         response = r.get(url = api_request_url)
 
