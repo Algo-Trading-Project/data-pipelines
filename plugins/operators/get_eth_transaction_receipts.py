@@ -11,7 +11,7 @@ import json
 # TODO: Implement failure callback function
 
 # TODO: Update gas used start and end block in Airflow
-class GetEthTransactionGasUsedOperator(BaseOperator):
+class GetEthTransactionReceiptsOperator(BaseOperator):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -36,7 +36,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
         if len(transaction_receipt_data) == 0:
             return
 
-        key = 'eth_data/transaction_gas_used_data/transaction_gas_used.json.{}'.format(self.counter)
+        key = 'eth_data/transaction_receipts_data/transaction_receipts.json.{}'.format(self.counter)
         data_to_upload = json.dumps(transaction_receipt_data).replace('[', '').replace(']', '').replace('},', '}')
 
         self.s3_connection.load_string(
@@ -146,11 +146,17 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     return
 
                 for receipt in transaction_receipts:
+
                     processed_transaction_receipts.append({
                         'transaction_hash': receipt['transactionHash'].lower(),
                         'block_no': int(receipt['blockNumber'], 16),
+                        'from_': receipt['from'].lower(),
+                        'to_': receipt['to'].lower(),
+                        'contract_address': receipt['contractAddress'].lower(),
+                        'status': int(receipt['status']),
                         'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
-                        'gas_used': int(receipt['gasUsed'], 16)
+                        'gas_used': int(receipt['gasUsed'], 16),
+                        'type': receipt['type']
                     })
                     
                 sleep(0.5)
