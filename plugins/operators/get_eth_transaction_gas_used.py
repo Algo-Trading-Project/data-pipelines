@@ -99,44 +99,44 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     return request_result.get('receipts')
     ####### HELPER FUNCTIONS END ########
 
-def execute(self, context):
-    start_block, end_block = self.start_block, self.end_block
-    processed_transaction_receipts = []
+    def execute(self, context):
+        start_block, end_block = self.start_block, self.end_block
+        processed_transaction_receipts = []
 
-    while True:
-        if end_block <= start_block:
-            self.log.info('GetEthTransactionGasUsed: Reached the beginning of the chain at block {}'.format(start_block))
-            self.__upload_to_s3(processed_transaction_receipts)
-            return
-
-        if len(processed_transaction_receipts) >= 10000:
-            self.log.info('GetEthTransactionGasUsed: Uploading data to S3')
-            self.__upload_to_s3(processed_transaction_receipts)
-            self.__update_start_and_end_block_airflow(start_block, end_block)
-            processed_transaction_receipts = []
-
-        self.log.info(f'GetEthTransactionGasUsed: Processing blocks {end_block} to {start_block}')
-
-        for block_num in range(end_block, start_block - 1, -1):
-            transaction_receipts = self.__get_block_transaction_receipts(block_num)
-
-            if transaction_receipts is None:
-                self.log.error(f'GetEthTransactionGasUsed: Error getting transaction receipts for block {block_num}')
-
+        while True:
+            if end_block <= start_block:
+                self.log.info('GetEthTransactionGasUsed: Reached the beginning of the chain at block {}'.format(start_block))
                 self.__upload_to_s3(processed_transaction_receipts)
-                self.__update_start_and_end_block_airflow(start_block, block_num)
-
                 return
 
-            for receipt in transaction_receipts:
-                processed_transaction_receipts.append({
-                    'transaction_hash': receipt['transactionHash'].lower(),
-                    'block_no': int(receipt['blockNumber'], 16),
-                    'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
-                    'gas_used': int(receipt['gasUsed'], 16)
-                })
-                
-            sleep(0.76)
+            if len(processed_transaction_receipts) >= 10000:
+                self.log.info('GetEthTransactionGasUsed: Uploading data to S3')
+                self.__upload_to_s3(processed_transaction_receipts)
+                self.__update_start_and_end_block_airflow(start_block, end_block)
+                processed_transaction_receipts = []
 
-        end_block = start_block - 1
-        start_block = max(end_block - 1000, 0)
+            self.log.info(f'GetEthTransactionGasUsed: Processing blocks {end_block} to {start_block}')
+
+            for block_num in range(end_block, start_block - 1, -1):
+                transaction_receipts = self.__get_block_transaction_receipts(block_num)
+
+                if transaction_receipts is None:
+                    self.log.error(f'GetEthTransactionGasUsed: Error getting transaction receipts for block {block_num}')
+
+                    self.__upload_to_s3(processed_transaction_receipts)
+                    self.__update_start_and_end_block_airflow(start_block, block_num)
+
+                    return
+
+                for receipt in transaction_receipts:
+                    processed_transaction_receipts.append({
+                        'transaction_hash': receipt['transactionHash'].lower(),
+                        'block_no': int(receipt['blockNumber'], 16),
+                        'effective_gas_price': float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18),
+                        'gas_used': int(receipt['gasUsed'], 16)
+                    })
+                    
+                sleep(0.76)
+
+            end_block = start_block - 1
+            start_block = max(end_block - 1000, 0)
