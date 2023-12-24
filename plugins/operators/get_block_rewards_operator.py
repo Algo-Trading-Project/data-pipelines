@@ -6,11 +6,6 @@ from web3 import Web3
 import requests as r
 import json
 
-# TODO: Implement failure callback function
-
-# TODO: Update block rewards start and end block in Airflow
-
-# TODO: Improve error handling
 class GetBlockRewardsOperator(BaseOperator):
 
     def __init__(self, **kwargs):

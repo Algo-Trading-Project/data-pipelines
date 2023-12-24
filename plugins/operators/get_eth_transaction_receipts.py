@@ -118,6 +118,7 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
         processed_transaction_receipts = []
 
         while True:
+            
             if end_block <= start_block:
                 self.log.info('GetEthTransactionGasUsed: Reached the beginning of the chain at block {}'.format(start_block))
                 self.__upload_to_s3(processed_transaction_receipts)
@@ -143,13 +144,13 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
                     return
 
                 for receipt in transaction_receipts:
-                    
+
                     transaction_hash = receipt['transactionHash'].lower() if receipt['transactionHash'] is not None else None
                     block_no = int(receipt['blockNumber'], 16) if receipt['blockNumber'] is not None else None
                     from_ = receipt['from'].lower() if receipt['from'] is not None else None
                     to_ = receipt['to'].lower() if receipt['to'] is not None else None
                     contract_address = receipt['contractAddress'].lower() if receipt['contractAddress'] is not None else None
-                    status = int(receipt['status']) if receipt['status'] is not None else None
+                    status = int(receipt['status'], 16) if receipt['status'] is not None else None
                     effective_gas_price = float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18) if receipt['effectiveGasPrice'] is not None else None
                     gas_used = int(receipt['gasUsed'], 16) if receipt['gasUsed'] is not None else None
                     type_ = receipt['type'] if receipt['type'] is not None else None

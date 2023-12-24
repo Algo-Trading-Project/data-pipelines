@@ -534,8 +534,6 @@ class GetOrderBookDataOperator(BaseOperator):
 
                 self.log.info('GetOrderBookDataOperator: ******* Getting order book data from {} to {}'.format(next_start_dates[0], next_start_dates[-1]))
                 self.log.info('GetOrderBookDataOperator: ')
-
-                #TODO: Add logging for number of order book snapshots collected
             
                 # Concurrently get next 10 order book snapshots for current token
                 scraped_order_book_snapshots = self._get_order_book_snapshots_concurrently(coinapi_symbol_id, next_start_dates)

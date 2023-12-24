@@ -187,7 +187,7 @@ class GetTickDataOperator(BaseOperator):
                     
                     # If request returned a non-empty response
                     else:
-                        print('got data for this pair... uploading to S3 and updating coinapi pairs metadata.')
+                        print('got data for this token... uploading to S3 and updating coinapi pairs metadata.')
                         print()
                         
                         # Upload new tick data for this token to S3
