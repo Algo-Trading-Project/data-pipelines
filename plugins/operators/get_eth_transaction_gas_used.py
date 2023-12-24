@@ -48,7 +48,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
 
         self.counter += 1
 
-    def __get_block_transaction_receipts(self, block_num):
+    def __get_block_transaction_receipts(self, block_num, max_retries = 1):
         headers = {
             'accept': 'application/json',
             'content-type': 'application/json'
@@ -65,7 +65,15 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
             'id': 1
         }
 
+        num_retries = 0
+
         while True:
+            if num_retries > max_retries:
+                self.log.error('GetEthTransactionGasUsed: Max retries exceeded for block {}'.format(block_num))
+                self.log.error('GetEthTransactionGasUsed:')
+
+                return None
+
             try:
                 request_url = 'https://eth-mainnet.g.alchemy.com/v2/{}'.format(Variable.get('alchemy_api_key'))
                 response = r.post(
@@ -81,8 +89,16 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                 return None
 
             if response.status_code != 200:
-                self.log.error('GetEthTransactionGasUsed: Error - {}'.format(response.json()))
-                self.log.error('GetEthTransactionGasUsed:')
+
+                if response.status_code == 429:
+                    self.log.error('GetEthTransactionGasUsed: Rate limit exceeded... sleeping for 1 second and trying again')
+                    self.log.error('GetEthTransactionGasUsed:')
+                    sleep(1)
+                    num_retries += 1
+                    continue
+                else:
+                    self.log.error('GetEthTransactionGasUsed: Error - {}'.format(response.json()))
+                    self.log.error('GetEthTransactionGasUsed:')
 
                 return None
 
@@ -97,6 +113,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                     return None
                 else:
                     return request_result.get('receipts')
+
     ####### HELPER FUNCTIONS END ########
 
     def execute(self, context):
@@ -136,7 +153,7 @@ class GetEthTransactionGasUsedOperator(BaseOperator):
                         'gas_used': int(receipt['gasUsed'], 16)
                     })
                     
-                sleep(0.76)
+                sleep(0.5)
 
             end_block = start_block - 1
             start_block = max(end_block - 1000, 0)
