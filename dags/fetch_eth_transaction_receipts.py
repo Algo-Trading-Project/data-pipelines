@@ -48,4 +48,4 @@ with DAG(
         upsert_keys = ['transaction_hash', 'block_no']
     )
 
-    gas_used_to_s3 >> s3_gas_used_to_redshift
+    transaction_receipts_to_s3 >> s3_transaction_receipts_to_redshift
