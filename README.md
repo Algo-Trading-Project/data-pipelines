@@ -28,5 +28,5 @@ Data pipelines have the following file structure:
 └── requirements
     └── requirements.txt
 
-5 directories, 19 files
+5 directories, 19 files, 2080 lines of code
 ```
