@@ -60,8 +60,6 @@ class GetBlockRewardsOperator(BaseOperator):
         if success:
             result = response['result']
 
-            print(result)
-
             block_rewards_data.append({
                 'block_no':int(result['blockNumber']), 
                 'miner_address':result['blockMiner'].lower(),

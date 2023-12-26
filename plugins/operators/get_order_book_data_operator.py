@@ -53,15 +53,6 @@ class GetOrderBookDataOperator(BaseOperator):
         Returns:
             None
         """
-
-        print('Task failed')
-        print()
-
-        print('order book snapshots: ', len(self.order_book_snapshots))
-        print()
-
-        print('token_metadata_str: ', token_metadata_str)
-        print()
         
         # Access the operator instance via context
         operator_instance = context['task_instance'].task
