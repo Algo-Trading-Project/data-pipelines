@@ -163,6 +163,9 @@ class GetTickDataOperator(BaseOperator):
 
                 # Get the latest date that was scraped for this pair
                 time_start = self.__get_next_start_date(coinapi_pair)
+
+                print('time_start: {}'.format(time_start))
+                print()
                 
                 # Increment time_start by 1 hour to get the next hour of data
                 time_end = str(parser.parse(time_start) + pd.Timedelta(hours = 1))
