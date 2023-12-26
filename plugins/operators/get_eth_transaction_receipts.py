@@ -4,6 +4,7 @@ from airflow.models import Variable
 from time import sleep
 from web3 import Web3
 from time import sleep
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests as r
 import json
@@ -111,14 +112,57 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
                 else:
                     return request_result.get('receipts')
 
-    ####### HELPER FUNCTIONS END ########
+     ####### HELPER FUNCTIONS END ########
+
+    def __get_block_transaction_receipts_concurrently(self, block_numbers, max_retries = 1):
+        results = []
+        failed_requests = set()
+
+        with ThreadPoolExecutor(max_workers = 10) as executor:
+            futures = [executor.submit(self.__get_block_transaction_receipts, block_num) for block_num in block_numbers]
+            future_to_block = {future: block_num for future, block_num in zip(futures, block_numbers)}
+
+            for future in as_completed(futures):
+                block_num = future_to_block[future]
+
+                try:
+                    result = future.result()
+                    if result is None:
+                        failed_requests.add(block_num)
+                    else:
+                        results.extend(result)
+                except Exception as e:
+                    failed_requests.add(block_num)
+
+        # Retry logic for failed requests
+        successfully_retried_requests = set()
+
+        for block_num in failed_requests:
+            for _ in range(max_retries):
+                try:
+                    result = self.__get_block_transaction_receipts(block_num)
+                    if result is None:
+                        continue
+                    else:
+                        results.extend(result)
+                        successfully_retried_requests.add(block_num)
+                        break
+                except Exception as e:
+                    continue
+
+        failed_requests -= successfully_retried_requests
+
+        for block_num in failed_requests:
+            self.log.error(f'GetEthTransactionReceiptsOperator: Request for block {block_num} failed after {max_retries} retries.')
+
+        return results
 
     def execute(self, context):
         start_block, end_block = self.start_block, self.end_block
         processed_transaction_receipts = []
 
         while True:
-            
+
             if end_block <= start_block:
                 self.log.info('GetEthTransactionGasUsed: Reached the beginning of the chain at block {}'.format(start_block))
                 self.__upload_to_s3(processed_transaction_receipts)
@@ -131,43 +175,41 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
                 processed_transaction_receipts = []
 
             self.log.info(f'GetEthTransactionGasUsed: Processing blocks {end_block} to {start_block}')
+            self.log.info('GetEthTransactionGasUsed:')
 
-            for block_num in range(end_block, start_block - 1, -1):
-                transaction_receipts = self.__get_block_transaction_receipts(block_num)
+            block_range = list(range(end_block, start_block - 1, -1))
+            transaction_receipts =  self.__get_transaction_receipts_concurrently(block_range)
 
-                if transaction_receipts is None:
-                    self.log.error(f'GetEthTransactionGasUsed: Error getting transaction receipts for block {block_num}')
+            if len(transaction_receipts) == 0:
+                self.log.error(f'GetEthTransactionGasUsed: No transaction receipts returned for blocks {end_block} to {start_block}')
+                self.log.error('GetEthTransactionGasUsed:')
 
-                    self.__upload_to_s3(processed_transaction_receipts)
-                    self.__update_start_and_end_block_airflow(start_block, block_num)
+                self.__upload_to_s3(processed_transaction_receipts)
 
-                    return
+                return
 
-                for receipt in transaction_receipts:
+            for receipt in transaction_receipts:
+                transaction_hash = receipt['transactionHash'].lower() if receipt['transactionHash'] is not None else None
+                block_no = int(receipt['blockNumber'], 16) if receipt['blockNumber'] is not None else None
+                from_ = receipt['from'].lower() if receipt['from'] is not None else None
+                to_ = receipt['to'].lower() if receipt['to'] is not None else None
+                contract_address = receipt['contractAddress'].lower() if receipt['contractAddress'] is not None else None
+                status = int(receipt['status'], 16) if receipt['status'] is not None else None
+                effective_gas_price = float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18) if receipt['effectiveGasPrice'] is not None else None
+                gas_used = int(receipt['gasUsed'], 16) if receipt['gasUsed'] is not None else None
+                type_ = receipt['type'] if receipt['type'] is not None else None
 
-                    transaction_hash = receipt['transactionHash'].lower() if receipt['transactionHash'] is not None else None
-                    block_no = int(receipt['blockNumber'], 16) if receipt['blockNumber'] is not None else None
-                    from_ = receipt['from'].lower() if receipt['from'] is not None else None
-                    to_ = receipt['to'].lower() if receipt['to'] is not None else None
-                    contract_address = receipt['contractAddress'].lower() if receipt['contractAddress'] is not None else None
-                    status = int(receipt['status'], 16) if receipt['status'] is not None else None
-                    effective_gas_price = float(int(receipt['effectiveGasPrice'], 16)) / (10 ** 18) if receipt['effectiveGasPrice'] is not None else None
-                    gas_used = int(receipt['gasUsed'], 16) if receipt['gasUsed'] is not None else None
-                    type_ = receipt['type'] if receipt['type'] is not None else None
+                processed_transaction_receipts.append({
+                    'transaction_hash': transaction_hash,
+                    'block_no': block_no,
+                    'from': from_,
+                    'to': to_,
+                    'contract_address': contract_address,
+                    'status': status,
+                    'effective_gas_price': effective_gas_price,
+                    'gas_used': gas_used,
+                    'type': type_
+                })
 
-                    processed_transaction_receipts.append({
-                        'transaction_hash': transaction_hash,
-                        'block_no': block_no,
-                        'from': from_,
-                        'to': to_,
-                        'contract_address': contract_address,
-                        'status': status,
-                        'effective_gas_price': effective_gas_price,
-                        'gas_used': gas_used,
-                        'type': type_
-                    })
-                    
-                sleep(0.1)
-
-            end_block = start_block - 1
+            end_block = max(start_block - 1, 0)
             start_block = max(end_block - 1000, 0)

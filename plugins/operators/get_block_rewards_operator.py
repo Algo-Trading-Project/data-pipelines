@@ -138,4 +138,3 @@ class GetBlockRewardsOperator(BaseOperator):
 
             start_block = end_block + 1
             end_block = min(start_block + 1000, self.web3_instance.eth.block_number)
-
