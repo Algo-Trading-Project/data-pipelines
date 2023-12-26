@@ -86,11 +86,14 @@ class GetTickDataOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}&apikey={}'.format(coinapi_symbol_id, time_start, time_end, Variable.get('coinapi_api_key'))
+        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}'.format(coinapi_symbol_id, time_start, time_end)
+        api_key =  Variable.get('coinapi_api_key')
         
-        response = r.get(url = api_request_url)
+        payload = {}
+        headers = {'Accept': 'application/json', 'X-CoinAPI-Key': api_key}
 
-        # Request successful
+        response = r.get(url = api_request_url, headers = headers, data = payload)
+
         if response.status_code == 200:
             response_json = response.json()
             formatted_response = format_response_data(response_json)
@@ -99,33 +102,41 @@ class GetTickDataOperator(BaseOperator):
         # Bad Request -- There is something wrong with your request
         elif response.status_code == 400:
             print('Bad Request -- There is something wrong with your request')
+            print(response.json())
             print()
             return response.status_code
         
         # Unauthorized -- Your API key is wrong
         elif response.status_code == 401:
             print('Unauthorized -- Your API key is wrong')
+            print(response.json())
             print()
             return response.status_code
         
         # Forbidden -- Your API key doesnt't have enough privileges to access this resource
         elif response.status_code == 403:
             print("Forbidden -- Your API key doesn't have enough privileges to access this resource")
+            print(response.json())
             print()
             return response.status_code
         
         # Too many requests -- You have exceeded your API key rate limits
         elif response.status_code == 429:
             print('Too many requests -- You have exceeded your API key rate limits')
+            print(response.json())
             print()
             return response.status_code
 
         # No data -- You requested specific single item that we don't have at this moment.
         elif response.status_code == 550:
-            print("No data -- You requested specific single item that we don't have at this moment.")
+            print("No data -- You requested specific single item that we don't have at this moment")
+            print(response.json())
             print()
             return response.status_code
         else:
+            print('Unknown error')
+            print(response.json())
+            print()
             return -1
         
     def execute(self, context):

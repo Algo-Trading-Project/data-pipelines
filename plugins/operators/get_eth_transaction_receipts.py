@@ -25,7 +25,6 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
 
         self.counter = 0
 
-    ####### HELPER FUNCTIONS ########
     def __update_start_and_end_block_airflow(self, start_block, end_block):
         Variable.set('transaction_gas_used_start_block', start_block)
         Variable.set('transaction_gas_used_end_block', end_block)

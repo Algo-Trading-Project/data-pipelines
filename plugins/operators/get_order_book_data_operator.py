@@ -288,15 +288,16 @@ class GetOrderBookDataOperator(BaseOperator):
             return response
 
         # Make request to CoinAPI
-        api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}&apikey={}'.format(coinapi_symbol_id, time_start, 1, Variable.get('coinapi_api_key'))
+        api_key = Variable.get('coinapi_api_key')
+        api_request_url = 'https://rest.coinapi.io/v1/orderbooks/{}/history?time_start={}&limit={}&apikey={}'.format(coinapi_symbol_id, time_start, 1, api_key)
+        
+        payload = {}
+        headers = {'Accept': 'application/json', 'X-CoinAPI-Key': api_key}
 
-        print('API request URL: ', api_request_url)
-        print()
+        response = r.get(url = api_request_url, headers = headers, data = payload)
         
         try:
             response = r.get(url = api_request_url)
-            print('Response: ', response.json())
-            print()
         except:
             return -1
 
