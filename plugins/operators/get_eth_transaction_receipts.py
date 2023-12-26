@@ -178,7 +178,7 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
             self.log.info('GetEthTransactionGasUsed:')
 
             block_range = list(range(end_block, start_block - 1, -1))
-            transaction_receipts =  self.__get_transaction_receipts_concurrently(block_range)
+            transaction_receipts =  self.__get_block_transaction_receipts_concurrently(block_range)
 
             if len(transaction_receipts) == 0:
                 self.log.error(f'GetEthTransactionGasUsed: No transaction receipts returned for blocks {end_block} to {start_block}')
@@ -189,6 +189,7 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
                 return
 
             for receipt in transaction_receipts:
+                
                 transaction_hash = receipt['transactionHash'].lower() if receipt['transactionHash'] is not None else None
                 block_no = int(receipt['blockNumber'], 16) if receipt['blockNumber'] is not None else None
                 from_ = receipt['from'].lower() if receipt['from'] is not None else None
