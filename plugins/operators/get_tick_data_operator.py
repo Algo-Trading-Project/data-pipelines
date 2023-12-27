@@ -86,7 +86,7 @@ class GetTickDataOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}'.format(coinapi_symbol_id, time_start, time_end)
+        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}&limit=100000'.format(coinapi_symbol_id, time_start, time_end)
         api_key =  Variable.get('coinapi_api_key')
         
         payload = {}
@@ -163,21 +163,16 @@ class GetTickDataOperator(BaseOperator):
 
                 # Get the latest date that was scraped for this pair
                 time_start = self.__get_next_start_date(coinapi_pair)
+                
+                print('Getting tick data starting from {}...'.format(time_start))
+                print()
 
-                print('time_start: {}'.format(time_start))
-                print()
-                
-                # Increment time_start by 1 hour to get the next hour of data
-                time_end = (parser.parse(time_start) + pd.Timedelta(hours = 24)).isoformat().split('+')[0].split('.')[0]
-                print('time_end: {}'.format(time_end))
-                print()
-                
                 # Get new data since the latest scrape date
                 latest_tick_data_for_token = self.__get_latest_tick_data(
                     coinapi_symbol_id = coinapi_symbol_id, 
                     time_start = time_start, 
                     time_end = time_end
-                )
+                )                
                 
                 # If request didn't succeed
                 if type(latest_tick_data_for_token) == int:
@@ -206,6 +201,9 @@ class GetTickDataOperator(BaseOperator):
                     else:
                         print('got data for this token... uploading to S3 and updating coinapi pairs metadata.')
                         print()
+
+                        # Get max date from the new data to use as the new latest scrape date
+                        time_end = latest_tick_data_for_token[-1]['time_exchange']
                         
                         # Upload new tick data for this token to S3
                         self.__upload_new_tick_data(latest_tick_data_for_token)
