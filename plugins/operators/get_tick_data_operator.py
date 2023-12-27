@@ -21,9 +21,9 @@ class GetTickDataOperator(BaseOperator):
         next_start_date = None
 
         if pd.isnull(most_recent_data_date):
-            next_start_date = parser.parse(str(coinapi_pair['data_orderbook_start'])).isoformat().split('+')[0]
+            next_start_date = parser.parse(str(coinapi_pair['data_orderbook_start'])).isoformat().split('+')[0].split('.')[0]
         else:
-            next_start_date = parser.parse(str(most_recent_data_date)).isoformat().split('+')[0]
+            next_start_date = parser.parse(str(most_recent_data_date)).isoformat().split('+')[0].split('.')[0]
 
         return next_start_date
 
