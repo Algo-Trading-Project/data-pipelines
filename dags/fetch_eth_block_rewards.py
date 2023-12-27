@@ -31,6 +31,7 @@ with DAG(
     block_rewards_table_cols = ['block_no', 'miner_address', 'block_reward']
     s3_block_rewards_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_block_rewards_to_redshift',
+        trigger_rule = 'all_done',
         schema = 'eth_data',
         table = 'block_reward',
         s3_bucket = 'project-poseidon-data',

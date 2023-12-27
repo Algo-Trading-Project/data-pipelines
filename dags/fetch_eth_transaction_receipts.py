@@ -36,6 +36,7 @@ with DAG(
 
     s3_transaction_receipts_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_transaction_receipts_to_redshift',
+        trigger_rule = 'all_done',
         schema = 'eth_data',
         table = 'transaction_recipt',
         s3_bucket = 'project-poseidon-data',

@@ -36,6 +36,7 @@ with DAG(
     
     s3_tick_data_to_redshift = S3ToRedshiftOperator(
         task_id = 's3_tick_data_to_redshift',
+        trigger_rule = 'all_done',
         schema = 'coinapi',
         table = 'tick_data',
         s3_bucket = 'project-poseidon-data',
@@ -44,7 +45,7 @@ with DAG(
         aws_conn_id = 's3_conn',
         method = 'UPSERT',
         upsert_keys = upsert_keys,
-        copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
+        copy_options = ["json 'auto'", "TIMEFORMAT 'YYYY-MM-DDTHH:MI:SS'"],
         column_list = tick_data_1h_cols
     )
 
