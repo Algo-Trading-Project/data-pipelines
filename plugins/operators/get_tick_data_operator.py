@@ -75,7 +75,7 @@ class GetTickDataOperator(BaseOperator):
             keys = keys_to_delete
         )
 
-    def __get_latest_tick_data(self, coinapi_symbol_id, time_start, time_end):
+    def __get_latest_tick_data(self, coinapi_symbol_id, time_start):
         def format_response_data(response):
             exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
 
@@ -86,7 +86,7 @@ class GetTickDataOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&time_end={}&limit=100000'.format(coinapi_symbol_id, time_start, time_end)
+        api_request_url = 'https://rest.coinapi.io/v1/trades/{}/history?time_start={}&limit=100000'.format(coinapi_symbol_id, time_start)
         api_key =  Variable.get('coinapi_api_key')
         
         payload = {}
@@ -170,8 +170,7 @@ class GetTickDataOperator(BaseOperator):
                 # Get new data since the latest scrape date
                 latest_tick_data_for_token = self.__get_latest_tick_data(
                     coinapi_symbol_id = coinapi_symbol_id, 
-                    time_start = time_start, 
-                    time_end = time_end
+                    time_start = time_start
                 )                
                 
                 # If request didn't succeed
