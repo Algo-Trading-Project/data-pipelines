@@ -168,7 +168,7 @@ class GetTickDataOperator(BaseOperator):
                 print()
                 
                 # Increment time_start by 1 hour to get the next hour of data
-                time_end = (parser.parse(time_start) + pd.Timedelta(hours = 1)).isoformat().split('+')[0].split('.')[0]
+                time_end = (parser.parse(time_start) + pd.Timedelta(hours = 24)).isoformat().split('+')[0].split('.')[0]
                 print('time_end: {}'.format(time_end))
                 print()
                 
@@ -197,6 +197,7 @@ class GetTickDataOperator(BaseOperator):
 
                     # If request returned an empty response
                     if len(latest_tick_data_for_token) <= 1:
+                        print('latest_tick_data_for_token: {}'.format(latest_tick_data_for_token))
                         print('No data returned for request... continuing to next pair.')
                         print()
                         break
