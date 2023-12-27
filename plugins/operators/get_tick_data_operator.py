@@ -168,7 +168,9 @@ class GetTickDataOperator(BaseOperator):
                 print()
                 
                 # Increment time_start by 1 hour to get the next hour of data
-                time_end = str(parser.parse(time_start) + pd.Timedelta(hours = 1))
+                time_end = (parser.parse(time_start) + pd.Timedelta(hours = 1)).isoformat().split('+')[0].split('.')[0]
+                print('time_end: {}'.format(time_end))
+                print()
                 
                 # Get new data since the latest scrape date
                 latest_tick_data_for_token = self.__get_latest_tick_data(
