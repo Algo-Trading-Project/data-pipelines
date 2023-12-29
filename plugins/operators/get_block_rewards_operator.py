@@ -48,6 +48,8 @@ class GetBlockRewardsOperator(BaseOperator):
         try:
             api_url = 'https://api.etherscan.io/api?module=block&action=getblockreward&blockno={}&apikey={}'.format(block, Variable.get('etherscan_api_key'))
             response = r.get(api_url).json()
+            print(response)
+            print()
         except Exception as e:
             self.log.error('GetBlockRewards: Error getting block rewards data for block {}'.format(block))
             self.log.error('GetBlockRewards: {}'.format(e))
