@@ -23,8 +23,9 @@ with DAG(
     
     tick_data_1h_cols = [
         'symbol_id', 'time_exchange', 'time_coinapi', 'uuid',
-        'price', 'size', 'taker_side', 'asset_id_base', 'asset_id_quote',
-        'exchange_id'
+        'price', 'size', 'taker_side', 'id_trade', 
+        'id_order_maker', 'id_order_taker', 'asset_id_base', 
+        'asset_id_quote', 'exchange_id'
     ]
 
     upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote',
