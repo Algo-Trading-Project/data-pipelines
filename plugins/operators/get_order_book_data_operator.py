@@ -11,6 +11,8 @@ import pandas as pd
 import dateutil.parser as parser
 import redshift_connector
 
+# TODO: FIX bid and ask string formatting
+
 class GetOrderBookDataOperator(BaseOperator):
     """
     Custom Airflow operator to fetch and store CoinAPI order book snapshots for specified tokens in Amazon S3.
@@ -124,7 +126,6 @@ class GetOrderBookDataOperator(BaseOperator):
             None
         """
 
-
         # If there is no new order book data to upload then return
         if len(self.order_book_snapshots) == 0:
             return
@@ -214,7 +215,7 @@ class GetOrderBookDataOperator(BaseOperator):
         if len(keys) == 0:
             return
 
-        # Else upload existing order book data to Redshift cluster
+        # Else UPSERT existing order book data to Redshift cluster
         with redshift_connector.connect(
             host = Variable.get('redshift_host'),
             database = 'token_price',
@@ -225,7 +226,7 @@ class GetOrderBookDataOperator(BaseOperator):
             with conn.cursor() as cursor:
 
                 aws_access_key_id = Variable.get('aws_access_key_id')
-                aws_secret_access_key = Variable.get('aws_secret_access_key')
+                aws_secret_access_key = Variable.get('aws_secret_access_key')                
 
                 query = """
                 COPY coinapi.order_book_data_1h

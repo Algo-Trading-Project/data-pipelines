@@ -9,7 +9,14 @@ import pandas as pd
 import dateutil.parser as parser
 
 class GetTickDataOperator(BaseOperator):
-    
+
+    DESIRED_TOKENS = [
+        'BTC_USD_COINBASE', 'ETH_USD_COINBASE', 'ADA_USDT_BINANCE',
+        'ALGO_USD_COINBASE', 'ATOM_USDT_BINANCE','BNB_USDC_BINANCE', 
+        'DOGE_USDT_BINANCE', 'FET_USDT_BINANCE', 'FTM_USDT_BINANCE',
+        'IOTA_USDT_BINANCE', 'LINK_USD_COINBASE','MATIC_USDT_BINANCE'
+    ]
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -150,6 +157,9 @@ class GetTickDataOperator(BaseOperator):
         coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
         coinapi_pairs_json = json.loads(coinapi_pairs_str)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
+
+        # Filter out tokens we don't want
+        coinapi_pairs_df = coinapi_pairs_df[coinapi_pairs_df['coinapi_symbol_id'].isin(self.DESIRED_TOKENS)]
 
         # For each token we have metadata for
         for i in range(len(coinapi_pairs_df)):

@@ -85,31 +85,17 @@ class GetEthTransactionReceiptsOperator(BaseOperator):
 
                 return None
 
-            if response.status_code != 200:
+            response = response.json()
+            error = response.get('error')
+            request_result = response.get('result')
 
-                if response.status_code == 429:
-                    self.log.error('GetEthTransactionGasUsed: Rate limit exceeded... sleeping for 1 second and trying again')
-                    self.log.error('GetEthTransactionGasUsed:')
-                    sleep(1)
-                    num_retries += 1
-                    continue
-                else:
-                    self.log.error('GetEthTransactionGasUsed: Error - {}'.format(response.json()))
-                    self.log.error('GetEthTransactionGasUsed:')
+            if error is not None:
+                self.log.error('GetEthTransactionGasUsed: Error - {}'.format(response.json()))
+                self.log.error('GetEthTransactionGasUsed:')
 
                 return None
-
             else:
-                response = response.json()
-                request_result = response.get('result')
-
-                if request_result == None:
-                    self.log.error('GetEthTransactionGasUsed: Nothing returned for block {}'.format(block_num))
-                    self.log.error('GetEthTransactionGasUsed:')
-
-                    return None
-                else:
-                    return request_result.get('receipts')
+                return request_result.get('receipts')
 
      ####### HELPER FUNCTIONS END ########
 
