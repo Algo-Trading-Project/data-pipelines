@@ -11,8 +11,7 @@ import dateutil.parser as parser
 class GetTickDataOperator(BaseOperator):
 
     DESIRED_TOKENS = [
-        'BTC_USD_COINBASE', 'ETH_USD_COINBASE', 'ADA_USDT_BINANCE',
-        'ALGO_USD_COINBASE', 'ATOM_USDT_BINANCE','BNB_USDC_BINANCE', 
+        'BTC_USD_COINBASE', 'ETH_USD_COINBASE', 'BNB_USDC_BINANCE', 
         'DOGE_USDT_BINANCE', 'FET_USDT_BINANCE', 'FTM_USDT_BINANCE',
         'IOTA_USDT_BINANCE', 'LINK_USD_COINBASE','MATIC_USDT_BINANCE'
     ]
@@ -159,7 +158,9 @@ class GetTickDataOperator(BaseOperator):
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
 
         # Filter out tokens we don't want
-        coinapi_pairs_df = coinapi_pairs_df[coinapi_pairs_df['coinapi_symbol_id'].isin(self.DESIRED_TOKENS)]
+        base_quote_exchange = coinapi_pairs_df['asset_id_base'] + '_' + coinapi_pairs_df['asset_id_quote'] + '_' + coinapi_pairs_df['exchange_id']
+        predicate = base_quote_exchange.isin(self.DESIRED_TOKENS)
+        coinapi_pairs_df = coinapi_pairs_df[predicate]
 
         # For each token we have metadata for
         for i in range(len(coinapi_pairs_df)):
