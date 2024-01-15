@@ -7,6 +7,7 @@ import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
+import uuid
 
 class GetTickDataOperator(BaseOperator):
 
@@ -18,9 +19,8 @@ class GetTickDataOperator(BaseOperator):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
+        
         self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
-        self.s3_file_chunk_num = 1
 
     def __get_next_start_date(self, coinapi_pair):
         most_recent_data_date = coinapi_pair['latest_scrape_date_trade']
@@ -35,16 +35,16 @@ class GetTickDataOperator(BaseOperator):
 
     def __upload_new_tick_data(self, new_tick_data):
         data_to_uplaod = json.dumps(new_tick_data).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/tick_data/coinapi_tick_data.json.{}'.format(self.s3_file_chunk_num)
+
+        # Generate a unique key for this file using a uuid
+        key = 'eth_data/tick_data/{}.json'.format(str(uuid.uuid4()))
 
         self.s3_connection.load_string(
             string_data = data_to_uplaod, 
             key = key, 
             bucket_name = 'project-poseidon-data', 
-            replace = True
+            replace = False
         )
-
-        self.s3_file_chunk_num += 1
 
     def __upload_new_coinapi_eth_pairs_metadata(self, coinapi_pairs_df):
         coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
