@@ -22,6 +22,30 @@ class GetTickDataOperator(BaseOperator):
         
         self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
 
+    @staticmethod
+    def on_task_failure(context):
+        """
+        Callback function to handle task failure. It uploads any collected data and updates metadata on S3.
+
+        This method is automatically invoked by Airflow upon the failure of the task. It ensures that any 
+        data collected before the failure is saved to S3 and that the token metadata in S3 is updated.
+
+        Parameters:
+            context (dict): The Airflow context object containing runtime information.
+
+        Returns:
+            None
+        """
+        
+        # Access the operator instance via context
+        operator_instance = context['task_instance'].task
+        
+        # Upload any data collected before the task failed to S3
+        operator_instance.__upload_new_tick_data()
+
+        # Update token metadata stored in S3 with new scrape dates
+        operator_instance.__upload_new_coinapi_eth_pairs_metadata()
+
     def __get_next_start_date(self, coinapi_pair):
         most_recent_data_date = coinapi_pair['latest_scrape_date_trade']
         next_start_date = None
