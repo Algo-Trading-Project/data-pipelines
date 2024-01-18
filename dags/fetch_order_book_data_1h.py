@@ -1,6 +1,7 @@
 from airflow import DAG
 from operators.get_order_book_data_operator import GetOrderBookDataOperator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 from datetime import timedelta
 import pendulum
@@ -16,17 +17,20 @@ def on_task_success(context):
         None
     """
 
+    s3_hook = S3Hook(aws_conn_id = 's3_conn')
+
     # Get keys for order book data stored in S3
-    keys_to_delete = self.s3_connection.list_keys(
+    keys_to_delete = s3_hook.list_keys(
         bucket_name = 'project-poseidon-data',
         prefix = 'eth_data/order_book_data'
     )
 
     # Delete order book data from S3
-    self.s3_connection.delete_objects(
+    s3_hook.delete_objects(
         bucket = 'project-poseidon-data', 
         keys = keys_to_delete
     )
+
 
 schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(
@@ -45,8 +49,7 @@ with DAG(
 ) as dag:
     
     order_book_data_1h_to_s3 = GetOrderBookDataOperator(
-        task_id = 'order_book_data_1h_to_s3',
-        on_failure_callback = GetOrderBookDataOperator.on_task_failure,
+        task_id = 'order_book_data_1h_to_s3'
     )
 
     order_book_data_1h_cols = [

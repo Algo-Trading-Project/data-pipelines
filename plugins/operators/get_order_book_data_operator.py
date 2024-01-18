@@ -41,30 +41,6 @@ class GetOrderBookDataOperator(BaseOperator):
         # Token metadata stored in S3
         self.token_metadata_df = self._get_coinapi_metadata()
 
-    @staticmethod
-    def on_task_failure(context):
-        """
-        Callback function to handle task failure. It uploads any collected data and updates metadata on S3.
-
-        This method is automatically invoked by Airflow upon the failure of the task. It ensures that any 
-        data collected before the failure is saved to S3 and that the token metadata in S3 is updated.
-
-        Parameters:
-            context (dict): The Airflow context object containing runtime information.
-
-        Returns:
-            None
-        """
-        
-        # Access the operator instance via context
-        operator_instance = context['task_instance'].task
-        
-        # Upload any data collected before the task failed to S3
-        operator_instance._upload_new_order_book_data()
-
-        # Update token metadata stored in S3 with new scrape dates
-        operator_instance._upload_coinapi_metadata()
-
     def _get_next_start_dates(self, coinapi_token):
             """
             Calculates the next set of start dates for scraping order book data for a given token.
