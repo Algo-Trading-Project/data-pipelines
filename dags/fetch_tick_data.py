@@ -74,8 +74,7 @@ with DAG(
         method = 'UPSERT',
         upsert_keys = upsert_keys,
         copy_options = ["json 'auto'", "TIMEFORMAT 'YYYY-MM-DDTHH:MI:SS'"],
-        column_list = tick_data_1h_cols,
-        on_sucess_callback = on_task_success
+        column_list = tick_data_1h_cols
     )
 
     tick_data_to_s3 >> s3_tick_data_to_redshift
