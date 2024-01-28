@@ -23,7 +23,7 @@ class GetOrderBookDataOperator(BaseOperator):
     
     # List of tokens to get order book data for
     DESIRED_TOKENS = [
-        'BTC_USD_COINBASE', 'ETH_USD_COINBASE'
+        'ETH_USD_COINBASE'
     ]
     
     def __init__(self, **kwargs):
