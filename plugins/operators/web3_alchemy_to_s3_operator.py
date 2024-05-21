@@ -1,4 +1,3 @@
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import BaseOperator
 from airflow.models import Variable
 from time import sleep

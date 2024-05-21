@@ -1,9 +1,7 @@
 from airflow.models import BaseOperator
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 from time import sleep
 from web3 import Web3
-from time import sleep
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests as r

@@ -1,6 +1,4 @@
 from airflow.models import BaseOperator
-
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 
 import requests as r
@@ -32,7 +30,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
+        # self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
         self.s3_file_chunk_num = 1
 
     def __get_next_start_date(self, coinapi_pair):

@@ -1,6 +1,5 @@
 from airflow import DAG
 from operators.get_coinapi_prices_operator import GetCoinAPIPricesOperator
-from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 from datetime import timedelta
 import pendulum
@@ -31,19 +30,4 @@ with DAG(
         'trades_count', 'exchange_id', 'asset_id_base', 'asset_id_quote'
     ]
 
-    s3_eth_pairs_1h_price_data_to_redshift = S3ToRedshiftOperator(
-        task_id = 's3_eth_pairs_1h_price_data_to_redshift',
-        trigger_rule = 'all_done',
-        schema = 'coinapi',
-        table = 'price_data_1h',
-        s3_bucket = 'project-poseidon-data',
-        s3_key = 'eth_data/price_data',
-        redshift_conn_id = 'token_price_database_conn',
-        aws_conn_id = 's3_conn',
-        method = 'UPSERT',
-        upsert_keys = ['exchange_id', 'asset_id_base', 'asset_id_quote', 'time_period_start'],
-        copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
-        column_list = price_data_1h_cols
-    )
-
-    eth_pairs_1h_price_data_to_s3 >> s3_eth_pairs_1h_price_data_to_redshift
+    eth_pairs_1h_price_data_to_s3

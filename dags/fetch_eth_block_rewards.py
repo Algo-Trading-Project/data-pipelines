@@ -2,8 +2,6 @@ from airflow import DAG
 from airflow.models import Variable
 
 from operators.get_block_rewards_operator import GetBlockRewardsOperator
-
-from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 from airflow.operators.python import PythonOperator
 
 from datetime import timedelta

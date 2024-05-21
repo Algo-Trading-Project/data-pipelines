@@ -1,7 +1,5 @@
 from airflow import DAG
 from operators.get_order_book_data_operator import GetOrderBookDataOperator
-from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 from datetime import timedelta
 import pendulum

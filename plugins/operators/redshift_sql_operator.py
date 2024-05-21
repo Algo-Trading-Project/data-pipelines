@@ -1,5 +1,4 @@
 from airflow.models import BaseOperator
-import redshift_connector
 from airflow.models import Variable
 
 class RedshiftSQLOperator(BaseOperator):

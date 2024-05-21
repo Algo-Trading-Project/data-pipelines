@@ -1,5 +1,4 @@
 from airflow.models import BaseOperator
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.models import Variable
 
 from datetime import timedelta, datetime
@@ -9,7 +8,6 @@ import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
-import redshift_connector
 
 # TODO: FIX bid and ask string formatting
 
