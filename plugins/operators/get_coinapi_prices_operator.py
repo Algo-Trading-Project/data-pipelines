@@ -5,6 +5,7 @@ import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
+import duckdb
 
 class GetCoinAPIPricesOperator(BaseOperator):
     """
@@ -13,25 +14,15 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
     It performs several key functions:
     - Fetches latest price data from CoinAPI for different ETH pairs.
-    - Uploads this data to a specified AWS S3 bucket.
+    - Uploads this data to DuckDB.
     - Updates and manages the metadata associated with each ETH pair.
     - Handles various API response statuses and potential errors.
     """
 
-    DESIRED_TOKENS = [
-        'BTC_USD_COINBASE', 'ETH_USD_COINBASE', 'ADA_USDT_BINANCE',
-        'ALGO_USD_COINBASE', 'ATOM_USDT_BINANCE', 'BCH_USD_COINBASE',
-        'BNB_USDC_BINANCE', 'DOGE_USDT_BINANCE', 'ETC_USD_COINBASE',
-        'FET_USDT_BINANCE', 'FTM_USDT_BINANCE', 'HOT_USDT_BINANCE',
-        'IOTA_USDT_BINANCE', 'LINK_USD_COINBASE', 'LTC_USD_COINBASE',
-        'MATIC_USDT_BINANCE',
-    ]
+    # TODO: Refactor to use DuckDB
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        # self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
-        self.s3_file_chunk_num = 1
 
     def __get_next_start_date(self, coinapi_pair):
         """
@@ -56,41 +47,39 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
     def __upload_new_price_data(self, new_price_data):
         """
-        Uploads new price data to an S3 bucket.
+        Uploads new price data to DuckDB.
 
         Parameters:
         new_price_data: A list of dictionaries containing the new price data.
         """
+        # Create a temporary json file to store the new price data
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_price_data_1m.json'
+        with open(f'{path}', 'w') as f:
+            json.dump(new_price_data, f)
 
-        data_to_uplaod = json.dumps(new_price_data).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/price_data/coinapi_pair_prices_1_hour.json.{}'.format(self.s3_file_chunk_num)
-
-        self.s3_connection.load_string(
-            string_data = data_to_uplaod, 
-            key = key, 
-            bucket_name = 'project-poseidon-data', 
-            replace = True
-        )
-
-        self.s3_file_chunk_num += 1
+        # Connect to the DuckDB database
+        with duckdb.connect(
+            database = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/database.db',
+            read_only = False
+        ) as conn:
+            
+            # Load the new price data into the database
+            conn.sql(f'COPY price_data_1m FROM {path} (FORMAT JSON, AUTO_DETECT true)')
+            conn.commit()
 
     def __upload_new_coinapi_eth_pairs_metadata(self, coinapi_pairs_df):
         """
-        Uploads the metadata of CoinAPI ETH pairs to an S3 bucket.
+        Writes the metadata of CoinAPI tokens to a local JSON file.
 
         Parameters:
         coinapi_pairs_df: A DataFrame containing the metadata of CoinAPI ETH pairs.
         """
 
         coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
-        coinapi_pairs_str = json.dumps(coinapi_pairs_df_json)
 
-        self.s3_connection.load_string(
-            string_data = coinapi_pairs_str,
-            key = 'eth_data/metadata/coinapi_pair_metadata.json',
-            bucket_name = 'project-poseidon-data',
-            replace = True
-        )
+        # Write the metadata to a local JSON file
+        with open('/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_metadata.json', 'w') as f:
+            json.dump(coinapi_pairs_df_json, f)
 
     def __update_coinapi_pairs_metadata(self, latest_price_data_for_pair, coinapi_pairs_df, coinapi_pair):
         """
@@ -112,7 +101,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         sort_key = lambda x: pd.to_datetime(x['time_period_start'])
 
         element_w_latest_date = max(latest_price_data_for_pair, key = sort_key)
-        new_latest_scrape_date = str(pd.to_datetime(element_w_latest_date['time_period_start']) + pd.Timedelta(hours = 1))
+        new_latest_scrape_date = str(pd.to_datetime(element_w_latest_date['time_period_start']) + pd.Timedelta(minutes = 1))
         new_latest_scrape_date = parser.parse(new_latest_scrape_date).isoformat()
 
         predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
@@ -120,21 +109,6 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
         return coinapi_pairs_df
     
-    def __delete_price_data_from_s3(self):
-        """
-        Deletes price data files from the S3 bucket.
-        """
-
-        keys_to_delete = self.s3_connection.list_keys(
-            bucket_name = 'project-poseidon-data',
-            prefix = 'eth_data/price_data'
-        )
-
-        self.s3_connection.delete_objects(
-            bucket = 'project-poseidon-data', 
-            keys = keys_to_delete
-        )
-
     def __get_latest_price_data(self, coinapi_symbol_id, time_start):
         """
         Fetches the latest price data from CoinAPI.
@@ -157,7 +131,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1HRS&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
+        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1MIN&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
         headers = {'X-CoinAPI-Key':Variable.get('coinapi_api_key')}
         
         try:
@@ -166,7 +140,6 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 headers = headers,
             )
         except:
-
             return -1
 
         # Request successful
@@ -219,21 +192,13 @@ class GetCoinAPIPricesOperator(BaseOperator):
         context: Airflow's execution context object.
         """
 
-        # Delete price data potentially stored in S3 from previous task runs
-        self.__delete_price_data_from_s3()
+        # File path for token metadata (last scrape dates)
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_metadata.json'
 
-        # S3 key for token metadata (last scrape dates)
-        key = 'eth_data/metadata/coinapi_pair_metadata.json'
-
-        # Read token metadata from S3 and load it into a DataFrame
-        coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
-        coinapi_pairs_json = json.loads(coinapi_pairs_str)
+        # Read token metadata from file and load it into a DataFrame
+        f = open(path, 'r')
+        coinapi_pairs_json = json.load(f)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
-
-        # Filter out tokens we don't want to get price data for
-        base_quote_exchange = coinapi_pairs_df['asset_id_base'] + '_' + coinapi_pairs_df['asset_id_quote'] + '_' + coinapi_pairs_df['exchange_id']
-        predicate = base_quote_exchange.isin(self.DESIRED_TOKENS)
-        coinapi_pairs_df = coinapi_pairs_df[predicate]
 
         # For each token we have metadata for
         for i in range(len(coinapi_pairs_df)):
@@ -243,7 +208,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 print('{}) pair: {}/{} (exchange: {})'.format(i + 1, coinapi_pair['asset_id_base'], coinapi_pair['asset_id_quote'], coinapi_pair['exchange_id']))
                 print()
                 
-                coinapi_symbol_id = coinapi_pair['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_pair['asset_id_base'] + '_' + coinapi_pair['asset_id_quote']
+                coinapi_symbol_id = coinapi_pair['symbol_id']
 
                 # Get the latest date that was scraped for this pair
                 time_start = self.__get_next_start_date(coinapi_pair)
@@ -254,8 +219,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
                 # If request didn't succeed
                 if type(latest_price_data_for_pair) == int:
 
-                    # If we have exceeded our API key rate limits then update token metadata stored in
-                    # S3 and stop this task
+                    # If we have exceeded our API key rate limits then update token metadata and stop this task
                     if latest_price_data_for_pair == 429:
                         self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
                         return
@@ -277,10 +241,10 @@ class GetCoinAPIPricesOperator(BaseOperator):
                     
                     # If request returned a non-empty response
                     else:
-                        print('got data for this token... uploading to S3 and updating coinapi pairs metadata.')
+                        print('got data for this token... uploading to database and updating coinapi tokens metadata.')
                         print()
                         
-                        # Upload new price data for this pair to S3
+                        # Upload new price data for this token to database
                         self.__upload_new_price_data(latest_price_data_for_pair)
 
                         # Update token metadata for this pair locally
@@ -290,5 +254,5 @@ class GetCoinAPIPricesOperator(BaseOperator):
                             coinapi_pair
                         )
 
-        # Update token metadata stored in S3
+        # Update token metadata stored locally
         self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)

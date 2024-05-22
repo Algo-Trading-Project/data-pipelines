@@ -7,3 +7,5 @@ airflow*
 requirements.txt
 standalone_admin_password.txt
 webserver_config.py
+data/
+data/*

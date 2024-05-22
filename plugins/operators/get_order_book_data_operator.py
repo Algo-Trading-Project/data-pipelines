@@ -9,6 +9,7 @@ import json
 import pandas as pd
 import dateutil.parser as parser
 
+# TODO: Refactor operator to use DuckDB
 # TODO: FIX bid and ask string formatting
 
 class GetOrderBookDataOperator(BaseOperator):

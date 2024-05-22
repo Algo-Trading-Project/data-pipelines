@@ -7,6 +7,8 @@ import pandas as pd
 import dateutil.parser as parser
 import uuid
 
+# TODO: Refactor to use DuckDB
+
 class GetTickDataOperator(BaseOperator):
 
     DESIRED_TOKENS = [
