@@ -7,6 +7,9 @@ import pandas as pd
 import dateutil.parser as parser
 import duckdb
 
+import os
+os.environ['NO_PROXY'] = '*'
+
 class GetCoinAPIPricesOperator(BaseOperator):
     """
     An Airflow operator to fetch and update Ethereum (ETH) token price data from CoinAPI,
@@ -64,7 +67,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         ) as conn:
             
             # Load the new price data into the database
-            conn.sql(f'COPY price_data_1m FROM {path} (FORMAT JSON, AUTO_DETECT true)')
+            conn.sql(f"COPY market_data.price_data_1m FROM '{path}' (FORMAT JSON, AUTO_DETECT true)")
             conn.commit()
 
     def __upload_new_coinapi_eth_pairs_metadata(self, coinapi_pairs_df):
@@ -133,6 +136,8 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
         api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1MIN&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
         headers = {'X-CoinAPI-Key':Variable.get('coinapi_api_key')}
+
+        self.log.info('API request URL: {}'.format(api_request_url))
         
         try:
             response = r.get(
@@ -141,7 +146,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             )
         except:
             return -1
-
+        
         # Request successful
         if response.status_code == 200:
             response_json = response.json()
@@ -175,9 +180,11 @@ class GetCoinAPIPricesOperator(BaseOperator):
         # No data -- You requested specific single item that we don't have at this moment.
         elif response.status_code == 550:
             print("No data -- You requested specific single item that we don't have at this moment.")
-            print()
             return response.status_code
         else:
+            print('Unknown error occurred... continuing to next token.')
+            print('API call response: ', response.json())
+            print()
             return -1
         
     def execute(self, context):
@@ -205,8 +212,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             while True:
                 coinapi_pair = coinapi_pairs_df.iloc[i]
 
-                print('{}) pair: {}/{} (exchange: {})'.format(i + 1, coinapi_pair['asset_id_base'], coinapi_pair['asset_id_quote'], coinapi_pair['exchange_id']))
-                print()
+                self.log.info('{}) pair: {}/{} (exchange: {})'.format(i + 1, coinapi_pair['asset_id_base'], coinapi_pair['asset_id_quote'], coinapi_pair['exchange_id']))
                 
                 coinapi_symbol_id = coinapi_pair['symbol_id']
 
@@ -221,6 +227,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
                     # If we have exceeded our API key rate limits then update token metadata and stop this task
                     if latest_price_data_for_pair == 429:
+                        self.log.info('API key rate limits exceeded... stopping task.')
                         self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
                         return
 
@@ -241,8 +248,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
                     
                     # If request returned a non-empty response
                     else:
-                        print('got data for this token... uploading to database and updating coinapi tokens metadata.')
-                        print()
+                        self.log.info('got data for this token... uploading to database and updating coinapi tokens metadata.')
                         
                         # Upload new price data for this token to database
                         self.__upload_new_price_data(latest_price_data_for_pair)
@@ -253,6 +259,4 @@ class GetCoinAPIPricesOperator(BaseOperator):
                             coinapi_pairs_df,
                             coinapi_pair
                         )
-
-        # Update token metadata stored locally
-        self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
+                        self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
