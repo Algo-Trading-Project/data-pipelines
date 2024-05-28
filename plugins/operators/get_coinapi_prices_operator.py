@@ -123,7 +123,11 @@ class GetCoinAPIPricesOperator(BaseOperator):
         """
 
         def format_response_data(response):
-            exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
+            try:
+                exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
+            except:
+                print('Error splitting {coinapi_symbol_id}')
+                return -1
             
             for elem in response:
                 elem['exchange_id'] = exchange_id
@@ -132,7 +136,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
 
             return response
 
-        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1MIN&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 10000)
+        api_request_url = 'https://rest.coinapi.io/v1/ohlcv/{}/history?period_id=1MIN&time_start={}&limit={}'.format(coinapi_symbol_id, time_start, 100000)
         headers = {'X-CoinAPI-Key':Variable.get('coinapi_api_key')}
 
         self.log.info('API request URL: {}'.format(api_request_url))
