@@ -101,9 +101,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
         asset_id_quote = coinapi_pair['asset_id_quote']
         exchange_id = coinapi_pair['exchange_id']
 
-        sort_key = lambda x: pd.to_datetime(x['time_period_start'])
-
-        element_w_latest_date = max(latest_price_data_for_pair, key = sort_key)
+        element_w_latest_date = latest_price_data_for_pair[-1]
         new_latest_scrape_date = str(pd.to_datetime(element_w_latest_date['time_period_start']) + pd.Timedelta(minutes = 1))
         new_latest_scrape_date = parser.parse(new_latest_scrape_date).isoformat()
 
