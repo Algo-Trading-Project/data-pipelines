@@ -67,7 +67,11 @@ class GetCoinAPIPricesOperator(BaseOperator):
         ) as conn:
             
             # Load the new price data into the database
-            conn.sql(f"COPY market_data.price_data_1m FROM '{path}' (FORMAT JSON, AUTO_DETECT true)")
+            query = f"""
+            INSERT OR REPLACE INTO market_data.price_data_1m
+            SELECT * FROM read_json_auto('{path}')
+            """
+            conn.sql(query)
             conn.commit()
 
     def __upload_new_coinapi_eth_pairs_metadata(self, coinapi_pairs_df):
@@ -208,6 +212,9 @@ class GetCoinAPIPricesOperator(BaseOperator):
         f = open(path, 'r')
         coinapi_pairs_json = json.load(f)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
+
+        # Shuffle the DataFrame to randomize the order of tokens
+        coinapi_pairs_df = coinapi_pairs_df.sample(frac = 1).reset_index(drop = True)
 
         # For each token we have metadata for
         for i in range(len(coinapi_pairs_df)):
