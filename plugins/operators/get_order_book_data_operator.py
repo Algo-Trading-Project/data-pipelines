@@ -1,6 +1,5 @@
 from airflow.models import BaseOperator
 from airflow.models import Variable
-
 from datetime import timedelta, datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -8,9 +7,10 @@ import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
+import duckdb
 
-# TODO: Refactor operator to use DuckDB
-# TODO: FIX bid and ask string formatting
+import os
+os.environ['NO_PROXY'] = '*'
 
 class GetOrderBookDataOperator(BaseOperator):
     """
@@ -19,26 +19,12 @@ class GetOrderBookDataOperator(BaseOperator):
     This operator retrieves order book data for a predefined list of tokens (`DESIRED_TOKENS`) and stores 
     the data in an S3 bucket. It includes mechanisms for handling failures, retries, and data synchronization.
     """
-    
-    # List of tokens to get order book data for
-    DESIRED_TOKENS = [
-        'ETH_USD_COINBASE'
-    ]
-    
+        
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # S3 connection
-        self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
-
-        # File chunk number for order book data
-        self.s3_file_chunk_num = 1
-
         # List of order book snapshots
         self.order_book_snapshots = []
-
-        # Token metadata stored in S3
-        self.token_metadata_df = self._get_coinapi_metadata()
 
     def _get_next_start_dates(self, coinapi_token):
             """
@@ -54,10 +40,10 @@ class GetOrderBookDataOperator(BaseOperator):
                 list of str: A list of ISO 8601 formatted start dates.
             """
             
-            # Round pandas datetime object t up to the nearest hour
-            def hour_rounder(t):
-                rounded_hour = t.replace(second=0, microsecond=0, minute=0, hour=t.hour) + timedelta(hours=1)
-                return rounded_hour.strftime('%Y-%m-%d %H:%M:%S')
+            # Round pandas datetime object t up to the nearest 30 minutes
+            def half_hour_rounder(t):
+                rounded_half_hour = t.replace(second=0, microsecond=0, minute=(t.minute // 30) * 30) + timedelta(minutes=30)
+                return rounded_half_hour.strftime('%Y-%m-%d %H:%M:%S')
 
             # Get the next date to scrape order book data for current token
             next_start_date = coinapi_token['latest_scrape_date_orderbook']
@@ -69,14 +55,14 @@ class GetOrderBookDataOperator(BaseOperator):
                 next_start_date = pd.to_datetime(coinapi_token['data_orderbook_start'])
 
                 # Round the date up to the nearest hour
-                next_start_date = hour_rounder(next_start_date)
+                next_start_date = half_hour_rounder(next_start_date)
 
                 # Convert the date to ISO 8601 format
                 next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
 
-                # Get the next 10 valid start dates separated by an hour
-                next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
-                next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
+                # Get the next 10 valid start dates separated by 30 minutes
+                next_start_dates = [parser.parse(next_start_date) + timedelta(minutes = 30 * i) for i in range(10)]
+                next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date <= datetime.utcnow()]
 
             # If we have scraped order book data for this token before
             else:
@@ -84,9 +70,9 @@ class GetOrderBookDataOperator(BaseOperator):
                 # Convert the date to ISO 8601 format
                 next_start_date = parser.parse(str(next_start_date)).isoformat().split('+')[0]
 
-                # Get the next 10 start dates separated by an hour
-                next_start_dates = [parser.parse(next_start_date) + timedelta(hours=i) for i in range(10)]
-                next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date < datetime.utcnow()]
+                # Get the next 10 start dates separated by 30 minutes
+                next_start_dates = [parser.parse(next_start_date) + timedelta(minutes = 30 * i) for i in range(10)]
+                next_start_dates = [date.isoformat().split('+')[0] for date in next_start_dates if date <= datetime.utcnow()]
 
             return next_start_dates
  
@@ -105,21 +91,31 @@ class GetOrderBookDataOperator(BaseOperator):
         if len(self.order_book_snapshots) == 0:
             return
         
-        # Else upload new order book data to S3
-        data_to_uplaod = json.dumps(self.order_book_snapshots).replace('[', '').replace(']', '').replace('},', '}')
-        key = 'eth_data/order_book_data/coinapi_pair_order_book_snapshot_1_hour.json.{}'.format(self.s3_file_chunk_num)
+        # Else upload new order book data to DuckDB
 
-        self.s3_connection.load_string(
-            string_data = data_to_uplaod, 
-            key = key, 
-            bucket_name = 'project-poseidon-data', 
-            replace = True
-        )
+        # Create temporary file to store order book data
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_order_book_data_30m.json'
+        data_to_upload = pd.DataFrame(self.order_book_snapshots)
+        data_to_upload.to_json(path, orient = 'records')
 
-        # Increment file chunk number
-        self.s3_file_chunk_num += 1
+        # Connect to DuckDB
+        with duckdb.connect(
+            database = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/database.db',
+            read_only = False
+        ) as conn:
+            
+            # Load the new order book data into the database
+            query = f"""
+            INSERT OR REPLACE INTO market_data.order_book_snapshot_30m (symbol_id, time_exchange, time_coinapi, asks, bids)
+            SELECT * FROM read_json_auto('{path}')
+            """
+            conn.sql(query)
+            conn.commit()
 
-    def _upload_coinapi_metadata(self):
+        # Clear the list of order book snapshots
+        self.order_book_snapshots = []
+
+    def _upload_coinapi_metadata(self, coinapi_pairs_df):
         """
         Uploads updated token metadata to S3.
 
@@ -129,19 +125,14 @@ class GetOrderBookDataOperator(BaseOperator):
         Returns:
             None
         """
-        # Convert updated token metadata DF to JSON
-        token_metadata_df_json = self.token_metadata_df.to_dict(orient = 'records')
-        token_metadata_str = json.dumps(token_metadata_df_json)
 
-        # Upload updated token metadata to S3
-        self.s3_connection.load_string(
-            string_data = token_metadata_str,
-            key = 'eth_data/metadata/coinapi_pair_metadata.json',
-            bucket_name = 'project-poseidon-data',
-            replace = True
-        )
+        coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
 
-    def _update_coinapi_metadata(self, time_start, coinapi_token):
+        # Write the metadata to a local JSON file
+        with open('/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_metadata.json', 'w') as f:
+            json.dump(coinapi_pairs_df_json, f)
+
+    def _update_coinapi_metadata(self, time_start, coinapi_token, coinapi_pairs_df):
             """
             Updates the next scrape date for a token in the local metadata.
 
@@ -161,78 +152,14 @@ class GetOrderBookDataOperator(BaseOperator):
             asset_id_quote = coinapi_token['asset_id_quote']
             exchange_id = coinapi_token['exchange_id']
 
-            # Next scrape date is one hour after the current scrape date
-            next_scrape_date = str(pd.to_datetime(time_start) + pd.Timedelta(hours = 1))
+            # Next scrape date is 30 minutes after the current scrape date
+            next_scrape_date = str(pd.to_datetime(time_start) + pd.Timedelta(minutes = 30))
             next_scrape_date = parser.parse(next_scrape_date).isoformat()
 
             # Update next scrape date for current token locally
-            predicate = (self.token_metadata_df['exchange_id'] == exchange_id) & (self.token_metadata_df['asset_id_base'] == asset_id_base) & (self.token_metadata_df['asset_id_quote'] == asset_id_quote)
-            self.token_metadata_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
+            predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
+            coinapi_pairs_df.loc[predicate, 'latest_scrape_date_orderbook'] = next_scrape_date
     
-    def _check_s3_for_existing_data(self):
-        """
-        Checks S3 for existing order book data.
-
-        This method checks if there is any existing order book data in the specified S3 bucket. 
-        If there is, it uploads the data to Redshift and deletes it from S3.
-
-        Returns:
-            None
-        """
-
-        # Get keys for order book data stored in S3
-        keys = self.s3_connection.list_keys(
-            bucket_name = 'project-poseidon-data',
-            prefix = 'eth_data/order_book_data'
-        )
-
-        # If there is no existing order book data in S3 then return
-        if len(keys) == 0:
-            return
-
-        # Else UPSERT existing order book data to Redshift cluster
-        with redshift_connector.connect(
-            host = Variable.get('redshift_host'),
-            database = 'token_price',
-            user = 'administrator',
-            password = Variable.get('redshift_password')
-        ) as conn:
-        
-            with conn.cursor() as cursor:
-
-                aws_access_key_id = Variable.get('aws_access_key_id')
-                aws_secret_access_key = Variable.get('aws_secret_access_key')                
-
-                query = """
-                COPY coinapi.order_book_data_1h
-                FROM 's3://project-poseidon-data/eth_data/order_book_data'
-                WITH CREDENTIALS 
-                'aws_access_key_id={};aws_secret_access_key={}'
-                    json 'auto'
-                    TIMEFORMAT 'auto'
-                """.format(aws_access_key_id, aws_secret_access_key)
-
-                try:
-                    # Upload existing order book data to Redshift and commit
-                    cursor.execute(query)
-                    conn.commit()
-                
-                except Exception as e:
-                    self.log.error('GetOrderBookDataOperator: Error uploading existing order book data to Redshift: {}'.format(e))
-                    self.log.error('GetOrderBookDataOperator: ')
-                    
-                    raise Exception('GetOrderBookDataOperator: Error uploading existing order book data to Redshift: {}'.format(e))
-
-                else:
-                    self.log.info('GetOrderBookDataOperator: Successfully uploaded existing order book data to Redshift.')
-                    self.log.info('GetOrderBookDataOperator: ')
-
-                    # Delete existing order book data from S3
-                    self.s3_connection.delete_objects(
-                        bucket = 'project-poseidon-data', 
-                        keys = keys
-                    )
-
     def _get_order_book_snapshot(self, coinapi_symbol_id, time_start):
         """
         Retrieves a single order book snapshot from CoinAPI for a given token and time.
@@ -256,10 +183,7 @@ class GetOrderBookDataOperator(BaseOperator):
             for elem in response:
                 elem['bids'] = json.dumps(elem['bids'])
                 elem['asks'] = json.dumps(elem['asks'])
-                
-                elem['exchange_id'] = exchange_id
-                elem['asset_id_base'] = asset_id_base
-                elem['asset_id_quote'] = asset_id_quote
+                elem['symbol_id'] = asset_id_base + '_' + asset_id_quote + '_' + exchange_id
 
             return response
 
@@ -328,6 +252,7 @@ class GetOrderBookDataOperator(BaseOperator):
 
         Returns:
             list: A list of order book snapshots.
+            set: A set of successful start times for which order book snapshots were collected.
 
         Raises:
             Exception: Specific exceptions are raised and logged if API requests fail after retries.
@@ -339,7 +264,11 @@ class GetOrderBookDataOperator(BaseOperator):
         # Set of failed requests
         failed_requests = set()
 
+        # Set of successful start times
+        successful_start_times = set()
+
         with ThreadPoolExecutor(max_workers = 10) as executor:
+            # Concurrently get order book snapshots for each start time
 
             # Submit the tasks and create a mapping of futures to api request timestamps
             futures = [executor.submit(self._get_order_book_snapshot, coinapi_symbol_id, start_time) for start_time in start_times]
@@ -363,6 +292,9 @@ class GetOrderBookDataOperator(BaseOperator):
                     else:
                         results.extend(result)
 
+                        # Add the successful start time to the set of successful start times
+                        successful_start_times.add(api_request_time)
+
                 # If the request failed then add it to the list of failed requests
                 except Exception as e:
                     failed_requests.add(api_request_time)
@@ -382,6 +314,7 @@ class GetOrderBookDataOperator(BaseOperator):
                     else:
                         results.extend(result)
                         succesfully_retried_requests.add(time)
+                        successful_start_times.add(time)
                         break
 
                 except Exception as e:
@@ -393,55 +326,7 @@ class GetOrderBookDataOperator(BaseOperator):
         for time in failed_requests:
             self.log.error('GetOrderBookDataOperator: Request for time ({}) failed after {} retries.'.format(time, max_retries))
 
-        return results
-
-    def _get_coinapi_metadata(self):
-        """
-        Fetches and filters the token metadata from an S3 bucket.
-
-        This method reads the metadata for all tokens from a specified S3 bucket. It then filters this metadata 
-        to include only the tokens listed in `DESIRED_TOKENS`. The metadata includes various details of the tokens, 
-        such as asset IDs, exchange IDs, and the latest scrape dates for order book data.
-
-        Returns:
-            pandas.DataFrame: A DataFrame containing filtered metadata for the desired tokens.
-        """
-
-        # S3 key for token metadata (next scrape dates)
-        key = 'eth_data/metadata/coinapi_pair_metadata.json'
-
-        # Read token metadata from S3 and load it into a DataFrame
-        token_metadata_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
-        token_metadata_json = json.loads(token_metadata_str)
-        token_metadata_df = pd.DataFrame(token_metadata_json)
-
-        # Filter out tokens we don't want to get order book data for
-        base_quote_exchange = token_metadata_df['asset_id_base'] + '_' + token_metadata_df['asset_id_quote'] + '_' + token_metadata_df['exchange_id']
-        predicate = base_quote_exchange.isin(self.DESIRED_TOKENS)
-        token_metadata_df = token_metadata_df[predicate]
-
-        return token_metadata_df
-
-    def _sync_data_with_s3(self):
-        """
-        Synchronizes collected order book data and updated metadata with S3.
-
-        This method handles the uploading of newly collected order book data for the current token to S3. 
-        It also updates the token metadata stored in S3 to reflect the most recent data retrieval activities. 
-        After syncing, it clears the local list of order book snapshots.
-
-        Returns:
-            None
-        """
-
-        # Upload new order book data collected for current token to S3
-        self._upload_new_order_book_data()
-
-        # Update token metadata stored in S3
-        self._upload_coinapi_metadata()
-
-        # Empty list of order book snapshots
-        self.order_book_snapshots = []
+        return results, successful_start_times
         
     def execute(self, context):
         """
@@ -458,28 +343,39 @@ class GetOrderBookDataOperator(BaseOperator):
             None
         """
 
-        # Check S3 for existing order book data
-        self._check_s3_for_existing_data()
-    
+        # File path for token metadata (last scrape dates)
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_metadata.json'
+
+        # Read token metadata from file and load it into a DataFrame
+        f = open(path, 'r')
+        coinapi_pairs_json = json.load(f)
+        coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
+
+        # Shuffle the DataFrame to randomize the order of tokens
+        coinapi_pairs_df = coinapi_pairs_df.sample(frac = 1).reset_index(drop = True)
+        coinapi_pairs_df = coinapi_pairs_df[(coinapi_pairs_df['asset_id_base'] == 'BTC') & (coinapi_pairs_df['asset_id_quote'] == 'USD') & (coinapi_pairs_df['exchange_id'] == 'COINBASE')]
+
         # For each token in DESIRED_TOKENS
-        for i in range(len(self.token_metadata_df)):
+        for i in range(len(coinapi_pairs_df)):
 
             # Get token metadata for current token
-            coinapi_token = self.token_metadata_df.iloc[i]
+            coinapi_token = coinapi_pairs_df.iloc[i]
 
             self.log.info('GetOrderBookDataOperator: {}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
+            self.log.info('GetOrderBookDataOperator: ')
 
             while True:
 
                 # Every time we collect at least 24 * 30 = 720 (~1 month) order
                 # book snapshots for current token
-                if len(self.order_book_snapshots) >= 24 * 30:
+                if len(self.order_book_snapshots) >= 2 * 24 * 30:
 
-                    self.log.info('GetOrderBookDataOperator: Collected ~1 month of order book snapshots for current token... syncing data with S3.')
+                    self.log.info('GetOrderBookDataOperator: Collected ~1 month of order book snapshots for current token... uploading data to DuckDB.')
                     self.log.info('GetOrderBookDataOperator: ')
 
-                    # Sync collected data and updated metadata with S3 and continue processing
-                    self._sync_data_with_s3()
+                    # Sync collected data and updated metadata with DuckDB and continue processing
+                    self._upload_coinapi_metadata(coinapi_pairs_df)
+                    self._upload_new_order_book_data()
                     continue
 
                 # Get CoinAPI symbol ID for current token
@@ -494,34 +390,42 @@ class GetOrderBookDataOperator(BaseOperator):
                     self.log.info('GetOrderBookDataOperator: No more valid dates to scrape for current token... continuing to next token.')
                     self.log.info('GetOrderBookDataOperator: ')
 
-                    # Sync collected data and updated metadata with S3 and move on to next token
-                    self._sync_data_with_s3()
+                    # Sync collected data and updated metadata with DuckDB and move on to next token
+                    self._upload_coinapi_metadata(coinapi_pairs_df)
+                    self._upload_new_order_book_data()
                     break
 
                 self.log.info('GetOrderBookDataOperator: ******* Getting order book data from {} to {}'.format(next_start_dates[0], next_start_dates[-1]))
                 self.log.info('GetOrderBookDataOperator: ')
             
                 # Concurrently get next 10 order book snapshots for current token
-                scraped_order_book_snapshots = self._get_order_book_snapshots_concurrently(coinapi_symbol_id, next_start_dates)
+                scraped_order_book_snapshots, successful_start_times = self._get_order_book_snapshots_concurrently(coinapi_symbol_id, next_start_dates)
+
+                # Convert successful_start_times to datetime objects
+                successful_start_times = [pd.to_datetime(time) for time in successful_start_times]
                 
-                # If request failed
-                if len(scraped_order_book_snapshots) == 0:
+                # If request failed (no order book snapshots collected)
+                if len(successful_start_times) == 0:
 
                     self.log.info('GetOrderBookDataOperator: Request failed... continuing to next token.')
                     self.log.info('GetOrderBookDataOperator: ')
 
-                    # Sync collected data and updated metadata with S3 and move on to next token
-                    self._sync_data_with_s3()
+                    # Sync collected data and updated metadata with DuckDB and move on to next token
+                    self._upload_coinapi_metadata(coinapi_pairs_df)
+                    self._upload_new_order_book_data()
                     break
 
-                # If request succeeded
+                # If request succeeded (at least one order book snapshot collected)
                 else:
 
-                    print('GetOrderBookDataOperator: ({}/{}) order book snapshots collected for current token.'.format(len(scraped_order_book_snapshots), len(next_start_dates)))
+                    print('GetOrderBookDataOperator: ({}/{}) order book snapshots collected for current token.'.format(len(successful_start_times), len(next_start_dates)))
                     print()
+
+                    # Get the maximum date from the list of successful start times
+                    max_date = max(successful_start_times)
                     
                     # Add to list of order book snapshots
                     self.order_book_snapshots.extend(scraped_order_book_snapshots)
 
                     # Update metadata for this token locally
-                    self._update_coinapi_metadata(next_start_dates[-1], coinapi_token)
+                    self._update_coinapi_metadata(max_date, coinapi_token, coinapi_pairs_df)

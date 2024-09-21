@@ -5,22 +5,16 @@ import requests as r
 import json
 import pandas as pd
 import dateutil.parser as parser
-import uuid
-
-# TODO: Refactor to use DuckDB
+import duckdb
 
 class GetTickDataOperator(BaseOperator):
 
     DESIRED_TOKENS = [
         'BTC_USD_COINBASE', 'ETH_USD_COINBASE', 'BNB_USDC_BINANCE', 
-        'DOGE_USDT_BINANCE', 'FET_USDT_BINANCE', 'FTM_USDT_BINANCE',
-        'IOTA_USDT_BINANCE', 'LINK_USD_COINBASE','MATIC_USDT_BINANCE'
     ]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
-        self.s3_connection = S3Hook(aws_conn_id = 's3_conn')
 
     def __get_next_start_date(self, coinapi_pair):
         most_recent_data_date = coinapi_pair['latest_scrape_date_trade']
@@ -34,28 +28,37 @@ class GetTickDataOperator(BaseOperator):
         return next_start_date
 
     def __upload_new_tick_data(self, new_tick_data):
-        data_to_uplaod = json.dumps(new_tick_data).replace('[', '').replace(']', '').replace('},', '}')
+        # If there is no new tick data to upload, return
+        if len(new_tick_data) == 0:
+            return
 
-        # Generate a unique key for this file using a uuid
-        key = 'eth_data/tick_data/{}.json'.format(str(uuid.uuid4()))
+        # Else upload new tick data to DuckDB
 
-        self.s3_connection.load_string(
-            string_data = data_to_uplaod, 
-            key = key, 
-            bucket_name = 'project-poseidon-data', 
-            replace = False
-        )
+        # Create temporary file to store new tick data
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_tick_data.json'
+        data_to_upload = pd.DataFrame(new_tick_data)
+        data_to_upload.to_json(path, orient = 'records')
 
-    def __upload_new_coinapi_eth_pairs_metadata(self, coinapi_pairs_df):
-        coinapi_pairs_df_json = coinapi_pairs_df.to_dict(orient = 'records')
-        coinapi_pairs_str = json.dumps(coinapi_pairs_df_json)
+        # Connect to DuckDB
+        with duckdb.connect(
+            database = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/database.db',
+            read_only = False
+        ) as conn:
+            
+            # Load the new tick data into the database
+            query = f"""
+            INSERT OR REPLACE INTO market_data.tick_data (symbol_id, time_exchange, time_coinapi, uuid, price, size, taker_side)
+            SELECT * FROM read_json_auto('{path}')
+            """
+            conn.sql(query)
+            conn.commit()
 
-        self.s3_connection.load_string(
-            string_data = coinapi_pairs_str,
-            key = 'eth_data/metadata/coinapi_pair_metadata.json',
-            bucket_name = 'project-poseidon-data',
-            replace = True
-        )
+    def __upload_coinapi_metadata(self, coinapi_pairs_df):
+        coinapi_pairs_json = coinapi_pairs_df.to_json(orient = 'records')
+
+        # Write the metadata to a local JSON file
+        with open('/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_metadata.json', 'w') as f:
+            json.dump(coinapi_pairs_df_json, f)
 
     def __update_coinapi_pairs_metadata(self, time_end, coinapi_pairs_df, coinapi_pair):
         asset_id_base = coinapi_pair['asset_id_base']
@@ -70,17 +73,6 @@ class GetTickDataOperator(BaseOperator):
 
         return coinapi_pairs_df
     
-    def __delete_tick_data_from_s3(self):
-        keys_to_delete = self.s3_connection.list_keys(
-            bucket_name = 'project-poseidon-data',
-            prefix = 'eth_data/tick_data'
-        )
-
-        self.s3_connection.delete_objects(
-            bucket = 'project-poseidon-data', 
-            keys = keys_to_delete
-        )
-
     def __get_latest_tick_data(self, coinapi_symbol_id, time_start):
         def format_response_data(response):
             exchange_id, symbol_id, asset_id_base, asset_id_quote = coinapi_symbol_id.split('_')
@@ -146,37 +138,37 @@ class GetTickDataOperator(BaseOperator):
             return -1
         
     def execute(self, context):
-        # Delete price data potentially stored in S3 from previous task runs
-        self.__delete_tick_data_from_s3()
+        # File path for token metadata (last scrape dates)
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/coinapi_metadata.json'
 
-        # S3 key for token metadata (last scrape dates)
-        key = 'eth_data/metadata/coinapi_pair_metadata.json'
-
-        # Read token metadata from S3 and load it into a DataFrame
-        coinapi_pairs_str = self.s3_connection.read_key(key = key, bucket_name = 'project-poseidon-data')
-        coinapi_pairs_json = json.loads(coinapi_pairs_str)
+        # Read token metadata from file and load it into a DataFrame
+        f = open(path, 'r')
+        coinapi_pairs_json = json.load(f)
         coinapi_pairs_df = pd.DataFrame(coinapi_pairs_json)
 
-        # Filter out tokens we don't want
-        base_quote_exchange = coinapi_pairs_df['asset_id_base'] + '_' + coinapi_pairs_df['asset_id_quote'] + '_' + coinapi_pairs_df['exchange_id']
-        predicate = base_quote_exchange.isin(self.DESIRED_TOKENS)
-        coinapi_pairs_df = coinapi_pairs_df[predicate]
+        # Shuffle the DataFrame to randomize the order of tokens
+        coinapi_pairs_df = coinapi_pairs_df.sample(frac = 1).reset_index(drop = True)
+        coinapi_pairs_df = coinapi_pairs_df[(coinapi_pairs_df['asset_id_base'] == 'BTC') & (coinapi_pairs_df['asset_id_quote'] == 'USD') & (coinapi_pairs_df['exchange_id'] == 'COINBASE')]
 
-        # For each token we have metadata for
+        # For each token in DESIRED_TOKENS
         for i in range(len(coinapi_pairs_df)):
-            while True:
-                coinapi_pair = coinapi_pairs_df.iloc[i]
+            
+            # Get token metadata for current token
+            coinapi_token = coinapi_pairs_df.iloc[i]
 
-                print('{}) pair: {}/{} (exchange: {})'.format(i + 1, coinapi_pair['asset_id_base'], coinapi_pair['asset_id_quote'], coinapi_pair['exchange_id']))
-                print()
-                
-                coinapi_symbol_id = coinapi_pair['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_pair['asset_id_base'] + '_' + coinapi_pair['asset_id_quote']
+            self.log.info('GetTickDataOperator: {}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
+            self.log.info('GetTickDataOperator: ')
+
+            while True:
+
+                # Get the symbol ID for the current token 
+                coinapi_symbol_id = coinapi_token['exchange_id'] + '_' + 'SPOT' + '_' + coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote']
 
                 # Get the latest date that was scraped for this pair
-                time_start = self.__get_next_start_date(coinapi_pair)
+                time_start = self.__get_next_start_date(coinapi_token)
                 
-                print('Getting tick data starting from {}...'.format(time_start))
-                print()
+                self.log.info('GetTickDataOperator: Getting tick data starting from {}...'.format(time_start))
+                self.log.info('GetTickDataOperator: ')
 
                 # Get new data since the latest scrape date
                 latest_tick_data_for_token = self.__get_latest_tick_data(
@@ -187,10 +179,13 @@ class GetTickDataOperator(BaseOperator):
                 # If request didn't succeed
                 if type(latest_tick_data_for_token) == int:
 
-                    # If we have exceeded our API key rate limits then update token metadata stored in
-                    # S3 and stop this task
+                    self.log.info('GetTickDataOperator: Request failed...')
+                    self.log.info('GetTickDataOperator: ')
+
+                    # If we have exceeded our API key rate limits then update token metadata
+                    # and stop this task
                     if latest_tick_data_for_token == 429:
-                        self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
+                        self.__upload_coinapi_metadata(coinapi_pairs_df)
                         return
 
                     # Else just proceed to the next token
@@ -202,20 +197,20 @@ class GetTickDataOperator(BaseOperator):
 
                     # If request returned an empty response
                     if len(latest_tick_data_for_token) <= 1:
-                        print('latest_tick_data_for_token: {}'.format(latest_tick_data_for_token))
-                        print('No data returned for request... continuing to next pair.')
-                        print()
+                        self.log.info(f'GetTickDataOperator: data returned for request: {latest_tick_data_for_token}')
+                        self.log.info('GetTickDataOperator: No data returned for request... continuing to next token.')
+                        self.log.info('GetTickDataOperator: ')
                         break
                     
                     # If request returned a non-empty response
                     else:
-                        print('got data for this token... uploading to S3 and updating coinapi pairs metadata.')
-                        print()
+                        self.log.info('GetTickDataOperator: Request succeeded... Uploading tick data to DuckDB and updating token metadata.')
+                        self.log.info('GetTickDataOperator: ')
 
-                        # Get max date from the new data to use as the new latest scrape date
+                        # Get most recent date from the new data to use as the new latest scrape date
                         time_end = latest_tick_data_for_token[-1]['time_exchange']
                         
-                        # Upload new tick data for this token to S3
+                        # Upload new tick data for this token to DuckDB
                         self.__upload_new_tick_data(latest_tick_data_for_token)
 
                         # Update token metadata for this pair locally
@@ -225,5 +220,5 @@ class GetTickDataOperator(BaseOperator):
                             coinapi_pair
                         )
 
-        # Update token metadata stored in S3
-        self.__upload_new_coinapi_eth_pairs_metadata(coinapi_pairs_df)
+                        # Update token metadata stored in DuckDB
+                        self.__upload_coinapi_metadata(coinapi_pairs_df)

@@ -4,32 +4,6 @@ from operators.get_order_book_data_operator import GetOrderBookDataOperator
 from datetime import timedelta
 import pendulum
 
-def on_task_success(context):
-    """
-    Deletes existing order book data from S3.
-
-    This function is used to clear out any existing order book data from the specified S3 bucket, 
-    run after the data has been successfully loaded into Redshift.
-
-    Returns:
-        None
-    """
-
-    s3_hook = S3Hook(aws_conn_id = 's3_conn')
-
-    # Get keys for order book data stored in S3
-    keys_to_delete = s3_hook.list_keys(
-        bucket_name = 'project-poseidon-data',
-        prefix = 'eth_data/order_book_data'
-    )
-
-    # Delete order book data from S3
-    s3_hook.delete_objects(
-        bucket = 'project-poseidon-data', 
-        keys = keys_to_delete
-    )
-
-
 schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(
     year = 2023,
@@ -50,25 +24,4 @@ with DAG(
         task_id = 'order_book_data_1h_to_s3'
     )
 
-    order_book_data_1h_cols = [
-        'symbol_id', 'time_exchange', 'time_coinapi', 'asks', 'bids',
-        'asset_id_base', 'asset_id_quote', 'exchange_id'
-    ]
-
-    s3_order_book_data_1h_to_redshift = S3ToRedshiftOperator(
-        task_id = 's3_order_book_data_1h_to_redshift',
-        trigger_rule = 'all_done',
-        schema = 'coinapi',
-        table = 'order_book_data_1h',
-        s3_bucket = 'project-poseidon-data',
-        s3_key = 'eth_data/order_book_data',
-        redshift_conn_id = 'token_price_database_conn',
-        aws_conn_id = 's3_conn',
-        method = 'UPSERT',
-        upsert_keys = ['symbol_id', 'time_exchange', 'time_coinapi'],
-        copy_options = ["json 'auto'", "TIMEFORMAT 'auto'"],
-        column_list = order_book_data_1h_cols,
-        on_success_callback = on_task_success
-    )
-
-    order_book_data_1h_to_s3 >> s3_order_book_data_1h_to_redshift
+    order_book_data_1h_to_s3

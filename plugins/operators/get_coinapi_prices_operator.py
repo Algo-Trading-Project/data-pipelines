@@ -21,8 +21,6 @@ class GetCoinAPIPricesOperator(BaseOperator):
     - Updates and manages the metadata associated with each ETH pair.
     - Handles various API response statuses and potential errors.
     """
-
-    # TODO: Refactor to use DuckDB
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -68,7 +66,7 @@ class GetCoinAPIPricesOperator(BaseOperator):
             
             # Load the new price data into the database
             query = f"""
-            INSERT OR REPLACE INTO market_data.price_data_1m
+            INSERT OR REPLACE INTO market_data.price_data_1m (time_period_start, time_period_end, time_open, time_close, price_open, price_high, price_low, price_close, volume_traded, trades_count, exchange_id, asset_id_base, asset_id_quote)
             SELECT * FROM read_json_auto('{path}')
             """
             conn.sql(query)
