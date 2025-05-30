@@ -1,5 +1,5 @@
 from airflow import DAG
-from operators.get_order_book_data_operator import GetOrderBookDataOperator
+from operators.get_binance_trade_data_operator import GetBinanceTradeDataOperator
 
 from datetime import timedelta
 import pendulum
@@ -13,15 +13,15 @@ start_date = pendulum.datetime(
 )
 
 with DAG(
-    dag_id = 'fetch_order_book_data_1h',
+    dag_id = 'fetch_binance_trade_data',
     start_date = start_date,
     schedule_interval = schedule_interval,
     max_active_runs =  1,
     catchup = False
 ) as dag:
     
-    order_book_data_1h_to_s3 = GetOrderBookDataOperator(
-        task_id = 'order_book_data_1h_to_s3'
+    trade_data_to_duck_db = GetBinanceTradeDataOperator(
+        task_id = 'trade_data_to_duck_db'
     )
 
-    order_book_data_1h_to_s3
+    trade_data_to_duck_db

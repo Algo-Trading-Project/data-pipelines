@@ -1,5 +1,5 @@
 from airflow import DAG
-from operators.get_coinapi_prices_operator import GetCoinAPIPricesOperator
+from operators.get_binance_futures_ohlcv_data_operator import GetBinanceFuturesOHLCVDataOperator
 
 from datetime import timedelta
 import pendulum
@@ -13,15 +13,15 @@ start_date = pendulum.datetime(
 )
 
 with DAG(
-    dag_id = 'fetch_price_data_1m',
+    dag_id = 'fetch_binance_futures_ohlcv_data_1m',
     start_date = start_date,
     schedule_interval = schedule_interval,
     max_active_runs =  1,
     catchup = False
 ) as dag:
     
-    price_data_1m_to_duck_db = GetCoinAPIPricesOperator(
-        task_id = 'price_data_1m_to_duck_db'
+    futures_price_data_1m_to_duck_db = GetBinanceFuturesOHLCVDataOperator(
+        task_id = 'futures_price_data_1m_to_duck_db'
     )
 
-    price_data_1m_to_duck_db
+    futures_price_data_1m_to_duck_db
