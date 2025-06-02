@@ -53,6 +53,9 @@ class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
         Returns:
             None
         """
+        print('Uploading new futures ohlcv data to DuckDB....')
+        print()
+
         # Create temporary file to store trade data
         data_to_upload = pd.DataFrame(futures_ohlcv_data)
         symbol_id = f'{data_to_upload["asset_id_base"].iloc[0]}_{data_to_upload["asset_id_quote"].iloc[0]}_{data_to_upload["exchange_id"].iloc[0]}'

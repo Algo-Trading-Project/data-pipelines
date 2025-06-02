@@ -53,6 +53,9 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
         Returns:
             None
         """
+        print('Uploading new futures trade data to DuckDB....')
+        print()
+        
         # Create temporary file to store trade data
         path = '/Users/louisspencer/LocalData/data/futures_trade_data/binance_futures_trade_data.parquet'
         data_to_upload = pd.DataFrame(futures_trade_data)
@@ -65,7 +68,7 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
         ) as conn:
             # Load the new order book data into the database
             query = f"""
-            INSERT OR REPLACE INTO market_data.futures_trade_data
+            INSERT INTO market_data.futures_trade_data
             SELECT
                 trade_id,
                 timestamp,
@@ -100,7 +103,6 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
             Returns:
                 None
             """
-
             asset_id_base = coinapi_token['asset_id_base']
             asset_id_quote = coinapi_token['asset_id_quote']
             exchange_id = coinapi_token['exchange_id']
@@ -135,10 +137,10 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
         if pd.isnull(time_year):
             time_year = 2019
 
-        for year in range(int(time_year), 2025):
+        for year in range(int(time_year), 2026):
             for month in ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']:
-                # if year < time_year or (year == time_year and int(month) <= time_month):
-                #     continue
+                if year < time_year or (year == time_year and int(month) <= time_month):
+                    continue
                 try:
                     url = f'https://data.binance.vision/data/futures/um/monthly/trades/{base}{quote}/{base}{quote}-trades-{year}-{month}.zip'
                     print(f'Retrieving data for {month}-{year} from {url}....')
@@ -147,30 +149,42 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
 
                     with zipfile.ZipFile(io.BytesIO(response.content)) as z:
                         with z.open(f'{base}{quote}-trades-{year}-{month}.csv') as f:
-                            df = pd.read_csv(f, header = 0)
+                            df = pd.read_csv(
+                                f, 
+                                header = None
+                            )
                             df.columns = ['trade_id', 'price', 'qty', 'quote_qty', 'time', 'is_buyer_maker']
-                            
                             df['side'] = np.where(df['is_buyer_maker'] == True, 'sell', 'buy')
-                            df['time'] = pd.to_datetime(df['time'], unit = 'ms')
+                            try:
+                                df['time'] = pd.to_datetime(df['time'], unit = 'ms')
+                            except Exception as e:
+                                df = df.iloc[1:]  # Skip the first row if it contains headers or incorrect data
+                                df['time'] = pd.to_datetime(df['time'], unit = 'ms')
+
                             df['asset_id_base'] = base
                             df['asset_id_quote'] = quote
                             df['exchange_id'] = exchange
+                            df['trade_id'] = df['trade_id'].astype(int)
+                            df['price'] = df['price'].astype(float)
+                            df['qty'] = df['qty'].astype(float)
+                            df['quote_qty'] = df['quote_qty'].astype(float)
+                            df['is_buyer_maker'] = df['is_buyer_maker'].astype(bool)
 
                             df = df.drop(columns = ['is_buyer_maker'])
                             df = df.rename(columns = {'time': 'timestamp', 'qty': 'quantity', 'quote_qty': 'quote_quantity'})
                             df = df[['trade_id', 'timestamp', 'price', 'quantity', 'quote_quantity', 'side', 'asset_id_base', 'asset_id_quote', 'exchange_id']].drop_duplicates(subset = ['trade_id'])
                             
-                            print(df.head())
-                            print()
+                    print(df.head())
+                    print()
+                    max_date = df['timestamp'].max()
 
-                            max_date = df['timestamp'].max()
-
-                            self._upload_new_futures_trade_data(df)
-                            self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
+                    self._upload_new_futures_trade_data(df)
+                    self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
 
                 except Exception as e:
                     print(f'Error retrieving data from {url}....')
                     print(e)
+                    print()
                     continue
                
     def execute(self, context):
@@ -220,5 +234,5 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
                 binance_metadata = binance_metadata
             )
 
-            # Sleep for a random time between 1 and 5 seconds
-            time.sleep(random.randint(1, 5))
+            # Sleep for 1 second to avoid hitting API rate limits
+            # time.sleep(1)
