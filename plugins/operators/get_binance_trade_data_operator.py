@@ -2,33 +2,19 @@ from airflow.models import BaseOperator
 from datetime import timedelta
 
 import pandas as pd
-import duckdb
-import time
-import os
 import numpy as np
 import zipfile
 import io
-import requests as r
+import aiohttp
+import asyncio
+import pathlib
 
 class GetBinanceTradeDataOperator(BaseOperator):
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def _get_next_start_date(self, coinapi_token):
-            """
-            Calculates the next set of start dates for scraping price data for a given token.
-
-            This method generates a list of the next ten valid start dates, considering the most recent scrape date. 
-            It ensures that the dates are rounded to the nearest hour and are within the current UTC time.
-
-            Parameters:
-                coinapi_token (pandas.Series): A pandas Series containing metadata for a specific token.
-
-            Returns:
-                list of str: A list of ISO 8601 formatted start dates.
-            """
-                
+    def _get_next_start_date(self, coinapi_token):                
             # Get the next start date for the current token
             next_start_date = pd.to_datetime(coinapi_token['trade_data_end'], unit = 'ms') 
 
@@ -38,49 +24,16 @@ class GetBinanceTradeDataOperator(BaseOperator):
             else:
                 return next_start_date    
  
-    def _upload_new_trade_data(self, trade_data, year, month):
-        """
-        Uploads newly collected trade data to DuckDB.
+    def _upload_new_trade_data(self, trade_data, year, month, day):
+        self.log.info(f'Uploading new trade data for {year}-{month}-{day}...')
+        self.log.info('GetBinanceTradeDataOperator: ')
 
-        This method converts the trade data to JSON format and uploads it to a specified S3 bucket. 
-        It handles the process of chunking data and managing file names for storage.
-
-        Returns:
-            None
-        """
         # Create temporary file to store trade data
         data_to_upload = pd.DataFrame(trade_data)
         symbol_id = f"{data_to_upload['asset_id_base'][0]}_{data_to_upload['asset_id_quote'][0]}_{data_to_upload['exchange_id'][0]}"
-        path = f'/Users/louisspencer/LocalData/data/trade_data/{symbol_id}_{year}_{month}.csv.gz'
-        data_to_upload.to_csv(path, index = False, compression = 'gzip')
-
-        # Connect to DuckDB
-        # with duckdb.connect(
-        #     database = '/Users/louisspencer/LocalData/database.db',
-        #     read_only = False
-        # ) as conn:
-        #     # Load the new order book data into the database
-        #     query = f"""
-        #     INSERT OR REPLACE INTO market_data.trade_data
-        #     SELECT
-        #         trade_id,
-        #         timestamp,
-        #         price,
-        #         quantity,
-        #         quote_quantity,
-        #         side,
-        #         is_best_match,
-        #         asset_id_base,
-        #         asset_id_quote,
-        #         exchange_id
-        #     FROM read_parquet('{path}')
-        #     """
-        #     conn.sql(query)
-        #     conn.commit()
-        #     conn.close()
-        #
-        # # Remove the temporary file
-        # os.remove(path)
+        path = f'/Users/louisspencer/LocalData/data/trade_data/daily/{symbol_id}_{year}_{month}_{day}.parquet'
+        pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+        data_to_upload.to_parquet(path, index = False, compression = 'snappy')
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
             """
@@ -110,114 +63,80 @@ class GetBinanceTradeDataOperator(BaseOperator):
             metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
             coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
 
-    def _get_trade_data(self, base, quote, exchange, time_start, coinapi_token, binance_metadata):
-        """
-        Retrieves a single order book snapshot from CoinAPI for a given token and time.
+    async def _get_trade_data(self, session, sem, time_start, coinapi_token, binance_metadata):
+        year = time_start.year
+        month = f'{time_start.month:02d}'
+        day = f'{time_start.day:02d}'
+        base, quote, exchange = coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']
+        url = f'https://data.binance.vision/data/spot/daily/trades/{base}{quote}/{base}{quote}-trades-{year}-{month}-{day}.zip'
+        print(f'Retrieving data for {month}-{day}-{year} for {base}/{quote}...')
+        print()
+        try:
+            async with sem:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=180)) as response:
+                    if response.status != 200:
+                        print(f'Error retrieving data for {month}-{year}-{day}: {response.status}')
+                        print(f'URL: {url}')
+                        print(f'Response: {await response.text()}')
+                        print()
+                        return
+                    content = await response.read()
+        except Exception as e:
+            print(f'Error retrieving data for {month}-{year}-{day}: {str(e)}')
+            print(f'URL: {url}')
+            print()
+            return
 
-        Sends a request to the CoinAPI to fetch the order book data for a specific cryptocurrency token at 
-        a given time. Handles various HTTP response statuses to identify successful and failed requests.
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
+            with z.open(f'{base}{quote}-trades-{year}-{month}-{day}.csv') as f:
+                df = pd.read_csv(f, header = None)
 
-        Parameters:
-            coinapi_symbol_id (str): The identifier for the cryptocurrency symbol in CoinAPI.
+        df.columns = ['trade_id', 'price', 'qty', 'quote_qty', 'time', 'is_buyer_maker', 'is_best_match']
+        df['side'] = np.where(df['is_buyer_maker'] == True, 'sell', 'buy')
+        try:
+            df['time'] = pd.to_datetime(df['time'], unit = 'ms')
+        except Exception as e:
+            df['time'] = pd.to_datetime(df['time'] * 1000, unit = 'ns')
+        df['asset_id_base'] = base
+        df['asset_id_quote'] = quote
+        df['exchange_id'] = exchange
 
-            time_start (str): The start time for the data request in ISO 8601 format.
+        df = df.drop(columns = ['is_buyer_maker'])
+        df = df.rename(columns = {'time': 'timestamp', 'qty': 'quantity', 'quote_qty': 'quote_quantity'})
+        df = df[['trade_id', 'timestamp', 'price', 'quantity', 'quote_quantity', 'side', 'is_best_match', 'asset_id_base', 'asset_id_quote', 'exchange_id']].drop_duplicates(subset = ['trade_id'])
+        
+        print(df.head())
+        print()
 
-        Returns:
-            list or int: A list of a single order book snapshot if successful, otherwise an error code.
-        """
-        time_start = pd.to_datetime(time_start, unit = 'ms')
-        time_year = time_start.year
-        time_month = time_start.month
+        max_date = df['timestamp'].max()
 
-        if pd.isnull(time_year):
-            time_year = 2019
-
-        for year in range(int(time_year), 2025):
-            for month in ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']:
-                if year < time_year or (year == time_year and int(month) <= time_month):
-                    continue
-
-                try:
-                    url = f'https://data.binance.vision/data/spot/monthly/trades/{base}{quote}/{base}{quote}-trades-{year}-{month}.zip'
-                    print(f'Retrieving data for {month}-{year} from {url}....')
-                    print()
-                    response = r.get(url)
-
-                    with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-                        with z.open(f'{base}{quote}-trades-{year}-{month}.csv') as f:
-                            df = pd.read_csv(f, header = None)
-                            df.columns = ['trade_id', 'price', 'qty', 'quote_qty', 'time', 'is_buyer_maker', 'is_best_match']
-                            df['side'] = np.where(df['is_buyer_maker'] == True, 'sell', 'buy')
-                            try:
-                                df['time'] = pd.to_datetime(df['time'], unit = 'ms')
-                            except Exception as e:
-                                df['time'] = pd.to_datetime(df['time'] * 1000, unit = 'ns')
-                            df['asset_id_base'] = base
-                            df['asset_id_quote'] = quote
-                            df['exchange_id'] = exchange
-
-                            df = df.drop(columns = ['is_buyer_maker'])
-                            df = df.rename(columns = {'time': 'timestamp', 'qty': 'quantity', 'quote_qty': 'quote_quantity'})
-                            df = df[['trade_id', 'timestamp', 'price', 'quantity', 'quote_quantity', 'side', 'is_best_match', 'asset_id_base', 'asset_id_quote', 'exchange_id']].drop_duplicates(subset = ['trade_id'])
-                            
-                            print(df.head())
-                            print()
-
-                            max_date = df['timestamp'].max()
-
-                            self._upload_new_trade_data(df)
-                            self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
-
-                except Exception as e:
-                    print(f'Error retrieving data from {url}....')
-                    print(e)
-                    continue
+        self._upload_new_trade_data(df, year, month, day)
+        # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
                
     def execute(self, context):
-        """
-        Main execution function for the GetTickDataOperator.
-
-        This method orchestrates the entire process of collecting and storing CoinAPI order book data for specified tokens. 
-        It involves deleting existing data from S3, iterating over each token to collect new data, handling data synchronization 
-        with S3, and ensuring continuous data retrieval until all required data points are collected or no more valid dates are available.
-
-        Parameters:
-            context (dict): The Airflow context object containing runtime information about the task.
-
-        Returns:
-            None
-        """
-
-        # File path for token metadata (last scrape dates)
         path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
-
-        # Read token metadata from file and load it into a DataFrame
         binance_metadata = pd.read_json(path, lines = True)
+        execution_date = context['execution_date']
+        target_date = (execution_date - timedelta(days = 1)).date()
+        self.log.info(f'GetBinanceTradeDataOperator: Target date for trade data: {target_date}')
+        self.log.info('GetBinanceTradeDataOperator: ')
 
-        # For each token in DESIRED_TOKENS
-        for i in range(len(binance_metadata)):
-            # Get token metadata for current token
-            coinapi_token = binance_metadata.iloc[i]
-            symbol_id = coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote'] + '_' + coinapi_token['exchange_id']
-
-            self.log.info('GetBinanceTradeDataOperator: {}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
-            self.log.info('GetBinanceTradeDataOperator: ')
-
-            # Get the next start date for the current token
-            next_start_date = self._get_next_start_date(binance_metadata.iloc[i])
-
-            self.log.info('GetBinanceTradeDataOperator: ******* Getting trade data from {} to {}'.format(next_start_date, next_start_date + timedelta(days = 30)))
-            self.log.info('GetBinanceTradeDataOperator: ')
-        
-            # Get trade data for the current token
-            self._get_trade_data(
-                base = coinapi_token['asset_id_base'],
-                quote = coinapi_token['asset_id_quote'],
-                exchange = coinapi_token['exchange_id'],
-                time_start = next_start_date,
-                coinapi_token = coinapi_token,
-                binance_metadata = binance_metadata
-            )
-
-            # Sleep for 1 second to avoid hitting API rate limits
-            time.sleep(1)
+        async def _runner():
+            sem = asyncio.Semaphore(8)
+            async with aiohttp.ClientSession() as session:
+                tasks = []
+                for i in range(len(binance_metadata)):
+                    tasks.append(
+                        self._get_trade_data(
+                            session, 
+                            sem, 
+                            target_date,
+                            binance_metadata.iloc[i],
+                            binance_metadata
+                        )
+                    )
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for e in [r for r in results if isinstance(r, Exception)]:
+                    self.log.warning(f'Error in task: {e}')
+        asyncio.run(_runner())
+                    
