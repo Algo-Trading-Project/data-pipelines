@@ -1,0 +1,13 @@
+.DS_Store
+*.pyc
+__pycache__
+logs/
+logs/*
+airflow*
+requirements.txt
+standalone_admin_password.txt
+webserver_config.py
+.venv
+*.idea
+.idea/*
+*.csv
