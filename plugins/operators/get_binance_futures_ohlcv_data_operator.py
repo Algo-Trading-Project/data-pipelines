@@ -16,26 +16,22 @@ class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
         super().__init__(**kwargs)
 
     def _get_next_start_date(self, coinapi_token):                
-            # Get the next start date for the current token
-            next_start_date = pd.to_datetime(coinapi_token['futures_candle_data_end'], unit = 'ms') 
+        # Get the next start date for the current token
+        next_start_date = pd.to_datetime(coinapi_token['futures_candle_data_end'], unit = 'ms') 
 
-            # If there is no next start date, use the token's initial start date
-            if pd.isnull(next_start_date):
-                return pd.to_datetime(coinapi_token['futures_candle_data_start'], unit = 'ms')
-            else:
-                return next_start_date    
+        # If there is no next start date, use the token's initial start date
+        if pd.isnull(next_start_date):
+            return pd.to_datetime(coinapi_token['futures_candle_data_start'], unit = 'ms')
+        else:
+            return next_start_date    
  
-    def _upload_new_futures_ohlcv_data(self, futures_ohlcv_data, year, month, day):
-        print('Uploading new futures ohlcv data to DuckDB....')
-        print()
-
-        # Create temporary file to store trade data
+    def _upload_new_futures_ohlcv_data(self, futures_ohlcv_data, time_start):
         data_to_upload = pd.DataFrame(futures_ohlcv_data)
+        date = time_start.strftime('%Y-%m-%d')
         symbol_id = f'{data_to_upload["asset_id_base"].iloc[0]}_{data_to_upload["asset_id_quote"].iloc[0]}_{data_to_upload["exchange_id"].iloc[0]}'
-        path = f'/Users/louisspencer/LocalData/data/futures_ohlcv_data/daily/{symbol_id}_{year}_{month}_{day}.parquet'
-        pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-        data_to_upload.to_parquet(path, index = False, compression = 'snappy')
-
+        output_path = f'~/LocalData/data/futures_ohlcv_data/symbol_id={symbol_id}/date={date}/futures_ohlcv_data.parquet'
+        data_to_upload.to_parquet(output_path, index=False, compression='snappy')
+            
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
             asset_id_base = coinapi_token['asset_id_base']
             asset_id_quote = coinapi_token['asset_id_quote']
@@ -49,7 +45,7 @@ class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
             metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
             coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
 
-    async def _get_futures_ohlcv_data(self, session, sem, time_start, coinapi_token, binance_metadata):                
+    async def _get_futures_ohlcv_data(self, session, sem, time_start, coinapi_token, binance_metadata):
         year = time_start.year
         month = f'{time_start.month:02d}'
         day = f'{time_start.day:02d}'
@@ -100,7 +96,7 @@ class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
 
         print(df.head())
         print()
-        self._upload_new_futures_ohlcv_data(df, year, month, day)
+        self._upload_new_futures_ohlcv_data(df, time_start=time_start)
         # Operator only gets yesterday's data, so no need to update the metadata
         # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
                

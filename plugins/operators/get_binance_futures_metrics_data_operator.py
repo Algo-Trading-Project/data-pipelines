@@ -21,38 +21,16 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
         super().__init__(**kwargs)
 
     def _get_next_start_date(self, coinapi_token):
-            """
-            Calculates the next set of start dates for scraping price data for a given token.
+        # Get the next start date for the current token
+        next_start_date = pd.to_datetime(coinapi_token['futures_metrics_data_end'], unit = 'ms') 
 
-            This method generates a list of the next ten valid start dates, considering the most recent scrape date. 
-            It ensures that the dates are rounded to the nearest hour and are within the current UTC time.
-
-            Parameters:
-                coinapi_token (pandas.Series): A pandas Series containing metadata for a specific token.
-
-            Returns:
-                list of str: A list of ISO 8601 formatted start dates.
-            """
-                
-            # Get the next start date for the current token
-            next_start_date = pd.to_datetime(coinapi_token['futures_metrics_data_end'], unit = 'ms') 
-
-            # If there is no next start date, use the token's initial start date
-            if pd.isnull(next_start_date):
-                return pd.to_datetime(coinapi_token['futures_metrics_data_start'], unit = 'ms')
-            else:
-                return next_start_date    
+        # If there is no next start date, use the token's initial start date
+        if pd.isnull(next_start_date) or next_start_date < pd.to_datetime('2021-12-01'):
+            return pd.to_datetime('2021-12-01T00:00:00', utc = True)
+        else:
+            return next_start_date    
  
     def _upload_new_futures_metrics(self, futures_metrics, year, month, day):
-        """
-        Uploads newly collected trade data to DuckDB.
-
-        This method converts the trade data to JSON format and uploads it to a specified S3 bucket. 
-        It handles the process of chunking data and managing file names for storage.
-
-        Returns:
-            None
-        """
         print('Uploading new futures metrics to DuckDB....')
         print()
 
@@ -91,20 +69,6 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
         # os.remove(path)
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
-            """
-            Updates the next scrape date for a token in the local metadata.
-
-            This method modifies the metadata DataFrame to reflect the next scrape date for a particular token, 
-            based on the most recent successful data retrieval.
-
-            Parameters:
-                time_start (str): The start time of the most recent successful data retrieval.
-                
-                coinapi_token (pandas.Series): A pandas Series containing metadata for a specific token.
-
-            Returns:
-                None
-            """
             asset_id_base = coinapi_token['asset_id_base']
             asset_id_quote = coinapi_token['asset_id_quote']
             exchange_id = coinapi_token['exchange_id']
@@ -118,27 +82,13 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
             coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
 
     def _get_futures_metrics(self, base, quote, exchange, time_start, coinapi_token, binance_metadata):
-        """
-        Retrieves a single order book snapshot from CoinAPI for a given token and time.
-
-        Sends a request to the CoinAPI to fetch the order book data for a specific cryptocurrency token at 
-        a given time. Handles various HTTP response statuses to identify successful and failed requests.
-
-        Parameters:
-            coinapi_symbol_id (str): The identifier for the cryptocurrency symbol in CoinAPI.
-
-            time_start (str): The start time for the data request in ISO 8601 format.
-
-        Returns:
-            list or int: A list of a single order book snapshot if successful, otherwise an error code.
-        """
         time_start = pd.to_datetime(time_start, unit = 'ms')
         time_year = time_start.year
         time_month = time_start.month
         time_day = time_start.day
         
         if pd.isnull(time_year):
-            time_year = 2019
+            time_year = 2021
 
         for year in range(int(time_year), 2026):
             for month in ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']:
@@ -149,6 +99,13 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
                     '31'
                 ]:
                     if year < time_year or (year == time_year and int(month) < time_month) or (year == time_year and int(month) == time_month and int(day) < time_day):
+                        continue
+                    try:
+                        curr_day = datetime(year, int(month), int(day))
+                    except ValueError:
+                        # Skip invalid dates (e.g., February 30)
+                        continue
+                    if curr_day > datetime.utcnow():
                         continue
                     try:
                         url = f'https://data.binance.vision/data/futures/um/daily/metrics/{base}{quote}/{base}{quote}-metrics-{year}-{month}-{day}.zip'
@@ -199,20 +156,6 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
                         continue
                
     def execute(self, context):
-        """
-        Main execution function for the GetTickDataOperator.
-
-        This method orchestrates the entire process of collecting and storing CoinAPI order book data for specified tokens. 
-        It involves deleting existing data from S3, iterating over each token to collect new data, handling data synchronization 
-        with S3, and ensuring continuous data retrieval until all required data points are collected or no more valid dates are available.
-
-        Parameters:
-            context (dict): The Airflow context object containing runtime information about the task.
-
-        Returns:
-            None
-        """
-
         # File path for token metadata (last scrape dates)
         path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
 
@@ -221,12 +164,14 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
 
         # For each token in DESIRED_TOKENS
         for i in range(len(binance_metadata)):
-            if i < 45:
+            if i < 52:
                 continue
-
             # Get token metadata for current token
             coinapi_token = binance_metadata.iloc[i]
             symbol_id = coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote'] + '_' + coinapi_token['exchange_id']
+
+            if not coinapi_token['asset_id_quote'] in ['USDT', 'BUSD', 'USDC']:
+                continue
 
             self.log.info('GetBinanceFuturesMetricsOperator: {}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
             self.log.info('GetBinanceFuturesMetricsOperator: ')

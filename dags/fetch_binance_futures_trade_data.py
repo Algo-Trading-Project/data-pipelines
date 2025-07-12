@@ -1,7 +1,8 @@
 from airflow import DAG
 from operators.get_binance_futures_trade_data_operator import GetBinanceFuturesTradeDataOperator
-
+from airflow.operators.dummy import DummyOperator
 from datetime import timedelta
+from datasets import RAW_FUTURES_TRADES
 import pendulum
 
 schedule_interval = timedelta(days = 1, hours = 1)
@@ -23,5 +24,6 @@ with DAG(
     futures_trade_data_to_duck_db = GetBinanceFuturesTradeDataOperator(
         task_id = 'futures_trade_data_to_duck_db'
     )
+    finish = DummyOperator(task_id = 'finish', outlets = [RAW_FUTURES_TRADES])
 
-    futures_trade_data_to_duck_db
+    futures_trade_data_to_duck_db >> finish

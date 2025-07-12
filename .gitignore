@@ -11,3 +11,6 @@ webserver_config.py
 *.idea
 .idea/*
 *.csv
+data/
+data/*
+binance_metadata.json

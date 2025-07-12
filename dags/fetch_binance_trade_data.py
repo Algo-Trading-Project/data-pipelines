@@ -1,6 +1,7 @@
 from airflow import DAG
 from operators.get_binance_trade_data_operator import GetBinanceTradeDataOperator
-
+from airflow.operators.dummy import DummyOperator
+from datasets import RAW_SPOT_TRADES
 from datetime import timedelta
 import pendulum
 
@@ -23,5 +24,6 @@ with DAG(
     trade_data_to_duck_db = GetBinanceTradeDataOperator(
         task_id = 'trade_data_to_duck_db'
     )
+    finish = DummyOperator(task_id = 'finish', outlets = [RAW_SPOT_TRADES])
 
-    trade_data_to_duck_db
+    trade_data_to_duck_db >> finish

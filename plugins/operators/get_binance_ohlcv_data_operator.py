@@ -37,7 +37,7 @@ class GetBinanceOHLCVDataOperator(BaseOperator):
             else:
                 return pd.to_datetime(next_start_date, unit = 'ms')   
  
-    def _upload_new_ohlcv_data(self, ohlcv_data, year, month, day):
+    def _upload_new_ohlcv_data(self, ohlcv_data, time_start):
         """
         Uploads newly collected trade data to DuckDB.
 
@@ -47,12 +47,11 @@ class GetBinanceOHLCVDataOperator(BaseOperator):
         Returns:
             None
         """
-        # Create temporary file to store OHLCV data
         data_to_upload = pd.DataFrame(ohlcv_data)
+        date = time_start.strftime('%Y-%m-%d')
         symbol_id = f"{data_to_upload['asset_id_base'].iloc[0]}_{data_to_upload['asset_id_quote'].iloc[0]}_{data_to_upload['exchange_id'].iloc[0]}"
-        path = f'/Users/louisspencer/LocalData/data/ohlcv_data/daily/{symbol_id}_{year}_{month}_{day}.parquet'
-        pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-        data_to_upload.to_parquet(path, index = False, compression = 'snappy')
+        output_path = f'/Users/louisspencer/LocalData/data/ohlcv_data/symbol_id={symbol_id}/date={date}/ohlcv_data.parquet'
+        data_to_upload.to_parquet(output_path, index = False, compression = 'snappy')
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
             """
@@ -133,7 +132,7 @@ class GetBinanceOHLCVDataOperator(BaseOperator):
 
         print(df.head())
         print()
-        self._upload_new_ohlcv_data(df, year = year, month = month, day = day)
+        self._upload_new_ohlcv_data(df, time_start)
         # Operator only gets yesterday's data, so no need to update the metadata
         # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
                

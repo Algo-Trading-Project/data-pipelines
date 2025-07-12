@@ -24,16 +24,12 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
             else:
                 return next_start_date    
  
-    def _upload_new_futures_trade_data(self, futures_trade_data, year, month, day):
-        print('Uploading new futures trade data to DuckDB....')
-        print()
-        symbol_id = futures_trade_data['asset_id_base'].iloc[0] + '_' + futures_trade_data['asset_id_quote'].iloc[0] + '_' + futures_trade_data['exchange_id'].iloc[0]
-
-        # Create temporary file to store trade data
-        path = f'/Users/louisspencer/LocalData/data/futures_trade_data/daily/{symbol_id}_{year}_{month}_{day}.parquet'
-        pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+    def _upload_new_futures_trade_data(self, futures_trade_data, time_start):
         data_to_upload = pd.DataFrame(futures_trade_data)
-        data_to_upload.to_parquet(path, index = False, compression = 'snappy')
+        date = time_start.strftime('%Y-%m-%d')
+        symbol_id = futures_trade_data['asset_id_base'].iloc[0] + '_' + futures_trade_data['asset_id_quote'].iloc[0] + '_' + futures_trade_data['exchange_id'].iloc[0]
+        output_path = f'/Users/louisspencer/LocalData/data/futures_trade_data/symbol_id={symbol_id}/date={date}/futures_trade_data.parquet'
+        data_to_upload.to_parquet(output_path, index = False, compression = 'snappy')
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
             asset_id_base = coinapi_token['asset_id_base']
@@ -106,7 +102,7 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
         print()
         max_date = df['timestamp'].max()
 
-        self._upload_new_futures_trade_data(df, year, month, day)
+        self._upload_new_futures_trade_data(df, time_start = time_start)
         # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
         
     def execute(self, context):
