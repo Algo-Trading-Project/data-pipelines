@@ -1,81 +1,66 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.operators.dummy import DummyOperator
+from airflow.operators.empty import EmptyOperator
 from datasets import RAW_SPOT_OHLCV, AGG_SPOT_OHLCV
 
-import pandas as pd
+import duckdb
 import fsspec
+import pandas as pd
 from datetime import datetime
 
-def agg_spot_ohlcv_data_1d(date: str):
-    # Convert Airflow date string
-    date_str = pd.to_datetime(date).strftime('%Y-%m-%d')
+def agg_spot_ohlcv_data_1d_duckdb(date: str):
+    date = pd.to_datetime(date)
+    prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+    date_str = date.strftime('%Y-%m-%d')
 
-    # Setup fsspec filesystem
+    # Determine FS backend
     fs = fsspec.filesystem('file') if RAW_SPOT_OHLCV.uri.startswith('~') or RAW_SPOT_OHLCV.uri.startswith('/') else fsspec.filesystem('s3')
 
-    # Normalize base URIs
-    input_root = fs.expand_path(RAW_SPOT_OHLCV.uri)
-    output_root = fs.expand_path(AGG_SPOT_OHLCV.uri)
+    # Expanded input/output paths
+    input_path = fs.expand_path(f"{RAW_SPOT_OHLCV.uri}/symbol_id=*/date={prev_date}/*.parquet")
+    output_path = fs.expand_path(f"{AGG_SPOT_OHLCV.uri}")
 
-    # List all symbol partitions
-    symbol_dirs = fs.glob(f"{input_root}/symbol_id=*")
+    # DuckDB query (right-labeled)
+    query = f"""
+        WITH ohlcv_agg_1d AS (
+            SELECT
+                date_trunc('day', time_period_end) + INTERVAL 1 day AS date,
+                asset_id_base,
+                asset_id_quote,
+                exchange_id,
+                asset_id_base || '_' || asset_id_quote || '_' || exchange_id AS symbol_id,
+                first(open) AS open,
+                max(high) AS high,
+                min(low) AS low,
+                last(close) AS close,
+                sum(volume) AS volume,
+                sum(trades) AS trades
+            FROM read_parquet('{input_path}')
+            GROUP BY date_trunc('day', time_period_end) + INTERVAL 1 day, asset_id_base, asset_id_quote, exchange_id
+        )
+        COPY (
+            SELECT * FROM ohlcv_agg_1d
+        )
+        TO '{output_path}' (
+            FORMAT PARQUET,
+            COMPRESSION 'SNAPPY',
+            PARTITION_BY (symbol_id, date)
+        );
+    """
 
-    for symbol_dir in symbol_dirs:
-        # Build full daily path
-        date_partition_path = f"{symbol_dir}/time_period_open={date_str}"
-
-        # List all Parquet files for the symbol on that day
-        parquet_files = fs.glob(f"{date_partition_path}/*.parquet")
-
-        if not parquet_files:
-            continue
-
-        # Load all files into one DataFrame
-        df = pd.concat([
-            pd.read_parquet(file, filesystem=fs)
-            for file in parquet_files
-        ])
-
-        # Run daily downsampling in Python
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df = df.set_index("timestamp").sort_index()
-        df_agg = df.resample("1D", label="right", closed="left").agg({
-            'asset_id_base': 'last',
-            'asset_id_quote': 'last',
-            'exchange_id': 'last',
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum',
-            'trades': 'sum'
-        }).dropna().reset_index()
-
-        if df_agg.empty:
-            continue
-
-        # Build symbol_id string
-        symbol_id = df_agg['asset_id_base'][0] + "_" + df_agg['asset_id_quote'][0] + "_" + df_agg['exchange_id'][0]
-
-        # Define output path (Hive-style)
-        output_path = f"{output_root}/symbol_id={symbol_id}/time_period_open={date_str}/agg.parquet"
-
-        # Write aggregated file back to output
-        with fs.open(output_path, 'wb') as f:
-            df_agg.to_parquet(f, index=False, compression='snappy')
+    duckdb.sql(query)
 
 # Define DAG
 with DAG(
-    dag_id="agg_spot_ohlcv_data_1d",
+    dag_id="agg_spot_ohlcv_data_1d_duckdb",
     schedule=[RAW_SPOT_OHLCV],
     catchup=False
 ) as dag:
     aggregate = PythonOperator(
         task_id="aggregate_spot_ohlcv",
-        python_callable=agg_spot_ohlcv_data_1d,
+        python_callable=agg_spot_ohlcv_data_1d_duckdb,
         op_kwargs={"date": "{{ ds }}"},
     )
-    finish = DummyOperator(task_id="finish", outlets=[AGG_SPOT_OHLCV])
+    finish = EmptyOperator(task_id="finish", outlets=[AGG_SPOT_OHLCV])
 
     aggregate >> finish

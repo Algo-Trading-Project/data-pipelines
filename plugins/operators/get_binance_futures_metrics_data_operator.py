@@ -69,17 +69,17 @@ class GetBinanceFuturesMetricsOperator(BaseOperator):
         # os.remove(path)
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
-            asset_id_base = coinapi_token['asset_id_base']
-            asset_id_quote = coinapi_token['asset_id_quote']
-            exchange_id = coinapi_token['exchange_id']
+        asset_id_base = coinapi_token['asset_id_base']
+        asset_id_quote = coinapi_token['asset_id_quote']
+        exchange_id = coinapi_token['exchange_id']
 
-            # Update next scrape date for current token locally
-            predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
-            coinapi_pairs_df.loc[predicate, 'futures_metrics_data_end'] = next_start_date
+        # Update next scrape date for current token locally
+        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
+        coinapi_pairs_df.loc[predicate, 'futures_metrics_data_end'] = next_start_date
 
-            # Write the metadata to a local JSON file
-            metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
-            coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
+        # Write the metadata to a local JSON file
+        metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
+        coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
 
     def _get_futures_metrics(self, base, quote, exchange, time_start, coinapi_token, binance_metadata):
         time_start = pd.to_datetime(time_start, unit = 'ms')

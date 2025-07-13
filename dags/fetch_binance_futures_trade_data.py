@@ -1,11 +1,10 @@
 from airflow import DAG
-from operators.get_binance_futures_trade_data_operator import GetBinanceFuturesTradeDataOperator
-from airflow.operators.dummy import DummyOperator
+from operators.get_binance_futures_trade_data_1d_operator import GetBinanceFuturesTradeDataDailyOperator
+from airflow.operators.empty import EmptyOperator
 from datetime import timedelta
 from datasets import RAW_FUTURES_TRADES
 import pendulum
 
-schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(
     year = 2023,
     month = 8,
@@ -16,14 +15,14 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id = 'fetch_binance_futures_trade_data',
     start_date = start_date,
-    schedule_interval = schedule_interval,
+    schedule = '@daily',
     max_active_runs =  1,
     catchup = False
 ) as dag:
     
-    futures_trade_data_to_duck_db = GetBinanceFuturesTradeDataOperator(
+    futures_trade_data_to_duck_db = GetBinanceFuturesTradeDataDailyOperator(
         task_id = 'futures_trade_data_to_duck_db'
     )
-    finish = DummyOperator(task_id = 'finish', outlets = [RAW_FUTURES_TRADES])
+    finish = EmptyOperator(task_id = 'finish', outlets = [RAW_FUTURES_TRADES])
 
     futures_trade_data_to_duck_db >> finish

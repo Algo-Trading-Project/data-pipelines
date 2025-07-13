@@ -10,7 +10,7 @@ import aiohttp
 import asyncio
 import pathlib
 
-class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
+class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -29,21 +29,23 @@ class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
         data_to_upload = pd.DataFrame(futures_ohlcv_data)
         date = time_start.strftime('%Y-%m-%d')
         symbol_id = f'{data_to_upload["asset_id_base"].iloc[0]}_{data_to_upload["asset_id_quote"].iloc[0]}_{data_to_upload["exchange_id"].iloc[0]}'
-        output_path = f'~/LocalData/data/futures_ohlcv_data/symbol_id={symbol_id}/date={date}/futures_ohlcv_data.parquet'
+        output_path = f'~/LocalData/data/futures_ohlcv_data/raw/symbol_id={symbol_id}/date={date}/futures_ohlcv_data.parquet'
+        # Ensure the directory exists
+        pathlib.Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         data_to_upload.to_parquet(output_path, index=False, compression='snappy')
             
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
-            asset_id_base = coinapi_token['asset_id_base']
-            asset_id_quote = coinapi_token['asset_id_quote']
-            exchange_id = coinapi_token['exchange_id']
+        asset_id_base = coinapi_token['asset_id_base']
+        asset_id_quote = coinapi_token['asset_id_quote']
+        exchange_id = coinapi_token['exchange_id']
 
-            # Update next scrape date for current token locally
-            predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
-            coinapi_pairs_df.loc[predicate, 'futures_candle_data_end'] = next_start_date
+        # Update next scrape date for current token locally
+        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
+        coinapi_pairs_df.loc[predicate, 'futures_candle_data_end'] = next_start_date
 
-            # Write the metadata to a local JSON file
-            metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
-            coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
+        # Write the metadata to a local JSON file
+        metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
+        coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
 
     async def _get_futures_ohlcv_data(self, session, sem, time_start, coinapi_token, binance_metadata):
         year = time_start.year
@@ -93,6 +95,9 @@ class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
             df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms').dt.round('1min')
             df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms').dt.round('1min')
             max_date = df['time_period_end'].max()
+
+        # Fill potentially missing minutes and forward fill
+        df = df.set_index('time_period_end').resample('1min').ffill().reset_index()
 
         print(df.head())
         print()

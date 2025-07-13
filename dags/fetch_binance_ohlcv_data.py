@@ -1,11 +1,10 @@
 from airflow import DAG
-from operators.get_binance_ohlcv_data_operator import GetBinanceOHLCVDataOperator
-from airflow.operators.dummy import DummyOperator
+from operators.get_binance_ohlcv_data_1d_operator import GetBinanceOHLCVDataDailyOperator
+from airflow.operators.empty import EmptyOperator
 from datasets import RAW_SPOT_OHLCV
 from datetime import timedelta
 import pendulum
 
-schedule_interval = timedelta(days = 1)
 start_date = pendulum.datetime(
     year = 2023,
     month = 8,
@@ -16,14 +15,14 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id = 'fetch_binance_ohlcv_data_1m',
     start_date = start_date,
-    schedule_interval = schedule_interval,
+    schedule = '@daily',
     max_active_runs =  1,
     catchup = False
 ) as dag:
     
-    price_data_1m_to_duck_db = GetBinanceOHLCVDataOperator(
+    price_data_1m_to_duck_db = GetBinanceOHLCVDataDailyOperator(
         task_id = 'price_data_1m_to_duck_db'
     )
-    finish = DummyOperator(task_id = 'finish_ohlcv_data', outlets=[RAW_SPOT_OHLCV]) # This dataset will be updated after the task runs
+    finish = EmptyOperator(task_id = 'finish_ohlcv_data', outlets=[RAW_SPOT_OHLCV])
 
     price_data_1m_to_duck_db >> finish

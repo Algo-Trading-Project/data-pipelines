@@ -9,7 +9,7 @@ import aiohttp
 import asyncio
 import pathlib
 
-class GetBinanceFuturesTradeDataOperator(BaseOperator): 
+class GetBinanceFuturesTradeDataDailyOperator(BaseOperator): 
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -28,7 +28,7 @@ class GetBinanceFuturesTradeDataOperator(BaseOperator):
         data_to_upload = pd.DataFrame(futures_trade_data)
         date = time_start.strftime('%Y-%m-%d')
         symbol_id = futures_trade_data['asset_id_base'].iloc[0] + '_' + futures_trade_data['asset_id_quote'].iloc[0] + '_' + futures_trade_data['exchange_id'].iloc[0]
-        output_path = f'/Users/louisspencer/LocalData/data/futures_trade_data/symbol_id={symbol_id}/date={date}/futures_trade_data.parquet'
+        output_path = f'~/LocalData/data/futures_trade_data/raw/symbol_id={symbol_id}/date={date}/futures_trade_data.parquet'
         data_to_upload.to_parquet(output_path, index = False, compression = 'snappy')
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):

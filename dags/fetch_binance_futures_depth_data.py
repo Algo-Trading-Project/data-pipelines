@@ -4,7 +4,6 @@ from operators.get_binance_futures_depth_data_operator import GetBinanceFuturesD
 from datetime import timedelta
 import pendulum
 
-schedule_interval = timedelta(days = 1, hours = 1)
 start_date = pendulum.datetime(
     year = 2023,
     month = 8,
@@ -15,7 +14,7 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id = 'fetch_binance_futures_depth_data',
     start_date = start_date,
-    schedule_interval = schedule_interval,
+    schedule = '@daily',
     max_active_runs =  1,
     catchup = False
 ) as dag:

@@ -1,0 +1,173 @@
+from airflow.models import BaseOperator
+from airflow.models import Variable
+from datetime import timedelta, datetime
+
+import json
+import pandas as pd
+import dateutil.parser as parser
+import time
+import subprocess
+import os
+import random
+import numpy as np
+import zipfile
+import io
+import duckdb
+import requests as r
+
+class GetBinanceFuturesOHLCVDataOperator(BaseOperator):
+        
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def _get_next_start_date(self, coinapi_token):
+        # Get the next start date for the current token
+        next_start_date = pd.to_datetime(coinapi_token['futures_candle_data_end'], unit = 'ms') 
+
+        # If there is no next start date, use the token's initial start date
+        if pd.isnull(next_start_date):
+            return pd.to_datetime(coinapi_token['futures_candle_data_start'], unit = 'ms')
+        else:
+            return next_start_date    
+ 
+    def _upload_new_futures_ohlcv_data(self, futures_ohlcv_data, year, month):
+        print('Uploading new futures ohlcv data to DuckDB....')
+        print()
+
+        # Create temporary file to store trade data
+        data_to_upload = pd.DataFrame(futures_ohlcv_data)
+        symbol_id = f'{data_to_upload["asset_id_base"].iloc[0]}_{data_to_upload["asset_id_quote"].iloc[0]}_{data_to_upload["exchange_id"].iloc[0]}'
+        path = f'/Users/louisspencer/LocalData/data/futures_ohlcv_data/{symbol_id}_{year}_{month}.csv.gz'
+        data_to_upload.to_csv(path, index = False, compression = 'gzip')
+
+        # Connect to DuckDB
+        # with duckdb.connect(
+        #     database = '/Users/louisspencer/LocalData/database.db',
+        #     read_only = False
+        # ) as conn:
+        #     # Load the new order book data into the database
+        #     query = f"""
+        #     INSERT OR REPLACE INTO market_data.futures_ohlcv_1m 
+        #     SELECT
+        #         time_period_start,
+        #         time_period_end,
+        #         open,
+        #         high,
+        #         low,
+        #         close,
+        #         volume,
+        #         quote_volume,
+        #         trades,
+        #         taker_buy_volume,
+        #         taker_buy_quote_volume
+        #     FROM read_parquet('{path}')
+        #     """
+            
+        #     conn.sql(query)
+        #     conn.commit()
+        #     conn.close()
+
+        # Remove the temporary file
+        # os.remove(path)
+
+    def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
+        asset_id_base = coinapi_token['asset_id_base']
+        asset_id_quote = coinapi_token['asset_id_quote']
+        exchange_id = coinapi_token['exchange_id']
+
+        # Update next scrape date for current token locally
+        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
+        coinapi_pairs_df.loc[predicate, 'futures_candle_data_end'] = next_start_date
+
+        # Write the metadata to a local JSON file
+        metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
+        coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
+
+    def _get_futures_ohlcv_data(self, base, quote, exchange, time_start, coinapi_token, binance_metadata):
+        time_start = pd.to_datetime(time_start, unit = 'ms')
+        time_year = time_start.year
+        time_month = time_start.month
+
+        if pd.isnull(time_year):
+            time_year = 2019
+
+        for year in range(int(time_year), 2026):
+            for month in ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']:
+                if year < time_year or (year == time_year and int(month) < time_month):
+                    continue
+                
+                url = f'https://data.binance.vision/data/futures/um/monthly/klines/{base}{quote}/1m/{base}{quote}-1m-{year}-{month}.zip'
+                print(f'Retrieving data for {month}-{year} from {url}....')
+                print()
+                response = r.get(url)
+                
+                if response.status_code != 200:
+                    print(f'Error retrieving data for {month}-{year}: {response.status_code}')
+                    print(response.content)
+                    print()
+                    continue
+
+                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                    with z.open(f'{base}{quote}-1m-{year}-{month}.csv') as f:
+                        df = pd.read_csv(f, header = None)
+                        df.columns = ['time_period_start', 'open', 'high', 'low', 'close', 'volume', 'time_period_end', 'quote_volume', 'trades', 'taker_buy_volume', 'taker_buy_quote_volume', 'ignore']
+                        df = df[['time_period_start', 'time_period_end', 'open', 'high', 'low', 'close', 'volume', 'quote_volume', 'trades', 'taker_buy_volume', 'taker_buy_quote_volume']]
+                        
+                        df['asset_id_base'] = base
+                        df['asset_id_quote'] = quote
+                        df['exchange_id'] = exchange
+
+                        try:
+                            df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms').dt.round('1min')
+                            df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms').dt.round('1min')
+                            max_date = df['time_period_end'].max()
+                        except Exception as e:
+                            # drop first row since it has header info
+                            df = df.iloc[1:]
+                            df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms').dt.round('1min')
+                            df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms').dt.round('1min')
+                            max_date = df['time_period_end'].max()
+
+                        print(df.head())
+                        print()
+
+                self._upload_new_futures_ohlcv_data(df, year, month)
+                self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
+               
+    def execute(self, context):
+        # File path for token metadata (last scrape dates)
+        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
+
+        # Read token metadata from file and load it into a DataFrame
+        binance_metadata = pd.read_json(path, lines = True)
+
+        # For each token in DESIRED_TOKENS
+        for i in range(len(binance_metadata)):
+            if i < 75:
+                continue
+
+            # Get token metadata for current token
+            coinapi_token = binance_metadata.iloc[i]
+            symbol_id = coinapi_token['asset_id_base'] + '_' + coinapi_token['asset_id_quote'] + '_' + coinapi_token['exchange_id']
+
+            self.log.info('GetBinanceFuturesOHLCVDataOperator: {}) token: {}/{} (exchange: {})'.format(i + 1, coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']))
+            self.log.info('GetBinanceFuturesOHLCVDataOperator: ')
+
+            # Get the next start date for the current token
+            next_start_date = self._get_next_start_date(binance_metadata.iloc[i])
+
+            self.log.info('GetBinanceFuturesOHLCVDataOperator: ******* Getting futures data from {} to {}'.format(next_start_date, next_start_date + timedelta(days = 30)))
+            self.log.info('GetBinanceFuturesOHLCVDataOperator: ')
+        
+            # Get futures data for the current token
+            self._get_futures_ohlcv_data(
+                base = coinapi_token['asset_id_base'],
+                quote = coinapi_token['asset_id_quote'],
+                exchange = coinapi_token['exchange_id'],
+                time_start = next_start_date,
+                coinapi_token = coinapi_token,
+                binance_metadata = binance_metadata
+            )
+
+            # Sleep for 1 second to avoid hitting API rate limits
+            # time.sleep(1)
