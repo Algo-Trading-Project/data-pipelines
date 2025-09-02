@@ -1,43 +1,25 @@
 import duckdb
+import pandas as pd
+
 from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from sklearn.pipeline import Pipeline
 from analysis.ml.custom_transformers import *
+from airflow.datasets import Dataset
 
-from datasets import (
-    ROLLING_SPOT_TRADES, ROLLING_FUTURES_TRADES,
-    AGG_SPOT_OHLCV, AGG_FUTURES_OHLCV,
-    FINAL_ML_FEATURES
-)
+# from datasets import (
+    # ROLLING_SPOT_TRADES, ROLLING_FUTURES_TRADES,
+    # AGG_SPOT_OHLCV, AGG_FUTURES_OHLCV,
+    # FINAL_ML_FEATURES
+# )
 
-# Pipeline for feature engineering and modeling
-feature_engineering_pipeline = Pipeline([
-    ('time_features', TimeFeatures()),
-
-    ('returns_features', ReturnsFeatures(
-        window_sizes = [1, 7, 30, 180],
-        lookback_windows = [30, 180]
-    )),
-
-    ('risk_features', RiskFeatures(
-        windows = [1],
-        lookback_windows = [30, 180]
-    )),
-
-    ('trade_features', TradeFeatures(
-        windows = [1, 7],
-        lookback_windows = [30, 180]
-    )),
-
-    ('spot_futures_features', SpotFuturesInteractionFeatures(
-        windows = [1, 7],
-        lookback_windows = [30, 180]
-    )),
-
-    ('rolling_z_score', RollingZScoreScaler(window_sizes = [30]))
-])
+ROLLING_SPOT_TRADES = Dataset("~/LocalData/data/trade_data/rolling")
+ROLLING_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/rolling")
+AGG_SPOT_OHLCV = Dataset("~/LocalData/data/ohlcv_data/agg")
+AGG_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/agg")
+FINAL_ML_FEATURES = Dataset("~/LocalData/data/ml_features")
 
 def generate_ml_features(exec_date):
     cutoff = (exec_date - timedelta(days=365)).date()
@@ -53,7 +35,7 @@ def generate_ml_features(exec_date):
     
     ohlcv_spot = f"""
     SELECT *
-    FROM read_parquet('{AGG_SPOT_OHLCV}/symbol_id=*/date={exec_date.strftime('%Y-%m-%d')}/*.parquet', hive_partitioning=true)
+    FROM read_parquet('{AGG_SPOT_OHLCV}/symbol_id=*/date=*/*.parquet', hive_partitioning=true)
     WHERE 
         symbol_id IN ({','.join(tokens_with_data)}) AND
         date >= '{cutoff}'
@@ -63,7 +45,7 @@ def generate_ml_features(exec_date):
 
     ohlcv_futures = f"""
     SELECT *
-    FROM read_parquet('{AGG_FUTURES_OHLCV}/symbol_id=*/date={exec_date.strftime('%Y-%m-%d')}/*.parquet', hive_partitioning=true)
+    FROM read_parquet('{AGG_FUTURES_OHLCV}/symbol_id=*/date=*/.parquet', hive_partitioning=true)
     WHERE 
         symbol_id IN ({','.join(tokens_with_data)}) AND
         date >= '{cutoff}'
@@ -90,6 +72,33 @@ def generate_ml_features(exec_date):
 
     final_features = []
 
+    # Pipeline for feature engineering and modeling
+    feature_engineering_pipeline = Pipeline([
+        ('time_features', TimeFeatures()),
+
+        ('returns_features', ReturnsFeatures(
+            window_sizes = [1, 7, 30, 180],
+            lookback_windows = [30, 180]
+        )),
+
+        ('risk_features', RiskFeatures(
+            windows = [1],
+            lookback_windows = [30, 180]
+        )),
+
+        ('trade_features', TradeFeatures(
+            windows = [1, 7],
+            lookback_windows = [30, 180]
+        )),
+
+        ('spot_futures_features', SpotFuturesInteractionFeatures(
+            windows = [1, 7],
+            lookback_windows = [30, 180]
+        )),
+
+        ('rolling_z_score', RollingZScoreScaler(window_sizes = [30]))
+    ])
+
     # For each individual symbol_id, pass through feature engineering pipeline
     for symbol_id in merged['symbol_id'].unique():
         symbol_data = merged[merged['symbol_id'] == symbol_id]
@@ -106,7 +115,7 @@ def generate_ml_features(exec_date):
         COPY final_ml_features TO '{FINAL_ML_FEATURES}' (
             FORMAT PARQUET, 
             COMPRESSION 'SNAPPY',
-            PARTITION_BY ('symbol_id', 'date'), 
+            PARTITION_BY (date)
         )
         """)
 

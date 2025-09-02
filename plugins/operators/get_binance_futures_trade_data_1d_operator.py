@@ -114,7 +114,7 @@ class GetBinanceFuturesTradeDataDailyOperator(BaseOperator):
         self.log.info('GetBinanceFuturesTradeDataOperator: ')
         
         async def _runner():
-            sem = asyncio.Semaphore(8)
+            sem = asyncio.Semaphore(10)
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for i in range(len(binance_metadata)):

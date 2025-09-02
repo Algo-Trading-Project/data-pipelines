@@ -1,14 +1,23 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from datasets import RAW_SPOT_TRADES, AGG_SPOT_TRADES
+from airflow.datasets import Dataset
+
+# from datasets import RAW_SPOT_TRADES, AGG_SPOT_TRADES
 
 import duckdb
 import pandas as pd
+import fsspec
 
-def agg_trade_data_1d(date):
+RAW_SPOT_TRADES   = Dataset("~/LocalData/data/trade_data/raw")
+AGG_SPOT_TRADES   = Dataset("~/LocalData/data/trade_data/agg")
+
+def agg_trade_data_1d(**context):
+    date = context['logical_date'] if 'logical_date' in context else context['data_interval_end'].strftime('%Y-%m-%d')
+    print('Starting aggregation for date:', date)
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+    date_str = date.strftime('%Y-%m-%d')
     
     # Setup fsspec filesystem
     fs = fsspec.filesystem('file') if RAW_FUTURES_TRADES.uri.startswith('~') or RAW_FUTURES_TRADES.uri.startswith('/') else fsspec.filesystem('s3')
@@ -23,7 +32,7 @@ def agg_trade_data_1d(date):
     query = f"""
     WITH spot_trade_data_agg_1d AS (
         SELECT
-            date_trunc('day', timestamp) + INTERVAL '1 day' AS date,
+            date_trunc('day', timestamp) AS date,
             asset_id_base,
             asset_id_quote,
             exchange_id,
@@ -55,7 +64,7 @@ def agg_trade_data_1d(date):
             QUANTILE_CONT(CASE WHEN side = 'buy' THEN quote_quantity ELSE NULL END, 0.9) AS "90th_percentile_buy_dollar_volume",
             QUANTILE_CONT(CASE WHEN side = 'sell' THEN quote_quantity ELSE NULL END, 0.9) AS "90th_percentile_sell_dollar_volume"
         FROM read_parquet('{input_path}')
-        GROUP BY date_trunc('day', timestamp) + INTERVAL '1 day', asset_id_base, asset_id_quote, exchange_id
+        GROUP BY date_trunc('day', timestamp), asset_id_base, asset_id_quote, exchange_id
     )
     COPY (
         SELECT * FROM spot_trade_data_agg_1d
@@ -63,7 +72,9 @@ def agg_trade_data_1d(date):
     TO '{output_path}' (
         FORMAT PARQUET,
         COMPRESSION 'SNAPPY',
-        PARTITION_BY (symbol_id, date)
+        PARTITION_BY (symbol_id, date),
+        WRITE_PARTITION_COLUMNS true,
+        OVERWRITE
     );
     """
     duckdb.sql(query)
@@ -75,7 +86,6 @@ with DAG(
 ) as dag:
     make = PythonOperator(
         task_id="build_spot_trade_features",
-        python_callable=agg_trade_data_1d,
-        op_kwargs={"date": "{{ ds }}"}
+        python_callable=agg_trade_data_1d
     )
     finish = EmptyOperator(task_id="finish", outlets=[AGG_SPOT_TRADES])

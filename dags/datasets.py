@@ -20,3 +20,9 @@ ROLLING_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/rolling")
 
 # ML feature datasets
 FINAL_ML_FEATURES = Dataset("~/LocalData/data/ml_features")
+
+# ML prediction datasets
+ML_PREDICTIONS = Dataset("~/LocalData/data/ml_predictions")
+
+# ML model datasets
+ML_MODELS = Dataset("~/LocalData/data/ml_models")

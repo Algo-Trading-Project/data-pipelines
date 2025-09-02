@@ -3,10 +3,14 @@ from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
+from airflow.datasets import Dataset
 
-from datasets import (
-    AGG_FUTURES_TRADES, ROLLING_FUTURES_TRADES
-)
+# from datasets import (
+#     AGG_FUTURES_TRADES, ROLLING_FUTURES_TRADES
+# )
+
+AGG_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/agg")
+ROLLING_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/rolling")
 
 # ----------------------- DuckDB SQL (parameterised) -----------------------
 _SQL_TEMPLATE = """

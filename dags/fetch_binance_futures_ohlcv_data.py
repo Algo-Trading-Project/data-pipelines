@@ -4,13 +4,17 @@ from airflow.datasets import Dataset
 # Dummy Operator for testing
 from airflow.operators.empty import EmptyOperator
 from datetime import timedelta
-from datasets import RAW_FUTURES_OHLCV
+from airflow.datasets import Dataset
+
+# from datasets import RAW_FUTURES_OHLCV
 import pendulum
 
+RAW_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/raw")
+
 start_date = pendulum.datetime(
-    year = 2023,
-    month = 8,
-    day = 15,
+    year = 2020,
+    month = 1,
+    day = 1,
     tz = 'America/Los_Angeles'
 )
 

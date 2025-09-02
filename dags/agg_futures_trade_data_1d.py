@@ -3,10 +3,15 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from datasets import RAW_FUTURES_TRADES, AGG_FUTURES_TRADES
+from airflow.datasets import Dataset
+# from datasets import RAW_FUTURES_TRADES, AGG_FUTURES_TRADES
 
 import duckdb
 import pandas as pd
+import fsspec
+
+RAW_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/raw")
+AGG_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/agg")
 
 def agg_futures_trade_data_1d(date):
     date = pd.to_datetime(date)
@@ -25,7 +30,7 @@ def agg_futures_trade_data_1d(date):
     query = f"""
     WITH futures_trade_data_agg_1d AS (
         SELECT
-            date_trunc('day', timestamp) + INTERVAL '1 day' AS date,
+            date_trunc('day', timestamp) AS date,
             asset_id_base,
             asset_id_quote,
             exchange_id,
@@ -57,7 +62,7 @@ def agg_futures_trade_data_1d(date):
             QUANTILE_CONT(CASE WHEN side = 'buy' THEN quote_quantity ELSE NULL END, 0.9) AS "90th_percentile_buy_dollar_volume",
             QUANTILE_CONT(CASE WHEN side = 'sell' THEN quote_quantity ELSE NULL END, 0.9) AS "90th_percentile_sell_dollar_volume"
         FROM read_parquet('{input_path}')
-        GROUP BY date_trunc('day', timestamp) + INTERVAL '1 day', asset_id_base, asset_id_quote, exchange_id
+        GROUP BY date_trunc('day', timestamp), asset_id_base, asset_id_quote, exchange_id
     )
     COPY (
         SELECT * FROM futures_trade_data_agg_1d
@@ -65,7 +70,9 @@ def agg_futures_trade_data_1d(date):
     TO '{output_path}' (
         FORMAT PARQUET,
         COMPRESSION 'SNAPPY',
-        PARTITION_BY (symbol_id, date)
+        PARTITION_BY (symbol_id, date),
+        WRITE_PARTITION_COLUMNS true,
+
     );
     """
     duckdb.sql(query)

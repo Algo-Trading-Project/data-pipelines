@@ -1,11 +1,15 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from datasets import RAW_FUTURES_OHLCV, AGG_FUTURES_OHLCV
+from airflow.datasets import Dataset
+# from datasets import RAW_FUTURES_OHLCV, AGG_FUTURES_OHLCV
 
 import duckdb
 import pandas as pd
 import fsspec
+
+RAW_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/raw")
+AGG_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/agg")
 
 def agg_futures_ohlcv_data_1d_duckdb(date: str):
     date = pd.to_datetime(date)
@@ -18,12 +22,14 @@ def agg_futures_ohlcv_data_1d_duckdb(date: str):
     # Expand paths
     input_path = fs.expand_path(f"{RAW_FUTURES_OHLCV.uri}/symbol_id=*/date={prev_date}/*.parquet")
     output_path = fs.expand_path(f"{AGG_FUTURES_OHLCV.uri}")
-
+    print('Input path:', input_glob)
+    print('Output path:', output_path)
+    print()
     # DuckDB SQL query for 1D aggregation (right-labeled)
     query = f"""
         WITH futures_ohlcv_agg_1d AS (
             SELECT
-                date_trunc('day', time_period_end) + INTERVAL 1 day AS date,
+                date_trunc('day', time_period_end) AS date,
                 asset_id_base,
                 asset_id_quote,
                 exchange_id,
@@ -35,7 +41,7 @@ def agg_futures_ohlcv_data_1d_duckdb(date: str):
                 sum(volume) AS volume,
                 sum(trades) AS trades
             FROM read_parquet('{input_path}')
-            GROUP BY date_trunc('day', time_period_end) + INTERVAL 1 day, asset_id_base, asset_id_quote, exchange_id
+            GROUP BY date_trunc('day', time_period_end), asset_id_base, asset_id_quote, exchange_id
         )
         COPY (
             SELECT * FROM futures_ohlcv_agg_1d
@@ -43,15 +49,17 @@ def agg_futures_ohlcv_data_1d_duckdb(date: str):
         TO '{output_path}' (
             FORMAT PARQUET,
             COMPRESSION 'SNAPPY',
-            PARTITION_BY (symbol_id, date)
+            PARTITION_BY (symbol_id, date),
+            WRITE_PARTITION_COLUMNS true,
+            OVERWRITE
         );
     """
-
     duckdb.sql(query)
+    print('Aggregation complete for date:', date_str)
 
 # Define Airflow DAG
 with DAG(
-    dag_id="agg_futures_ohlcv_data_1d_duckdb",
+    dag_id="agg_futures_ohlcv_data_1d",
     schedule=[RAW_FUTURES_OHLCV],
     catchup=False,
 ) as dag:

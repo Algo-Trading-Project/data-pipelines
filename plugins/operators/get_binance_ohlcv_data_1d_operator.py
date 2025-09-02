@@ -110,7 +110,7 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
         self.log.info('GetBinanceOHLCVDataOperator: Executing for target date: {}'.format(target_date))
 
         async def _runner():
-            sem = asyncio.Semaphore(30)
+            sem = asyncio.Semaphore(10)
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for i in range(len(binance_metadata)):

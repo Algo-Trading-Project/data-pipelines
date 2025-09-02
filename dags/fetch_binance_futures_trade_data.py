@@ -2,13 +2,17 @@ from airflow import DAG
 from operators.get_binance_futures_trade_data_1d_operator import GetBinanceFuturesTradeDataDailyOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import timedelta
-from datasets import RAW_FUTURES_TRADES
+from airflow.datasets import Dataset
+
+# from datasets import RAW_FUTURES_TRADES
 import pendulum
 
+RAW_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/raw")
+
 start_date = pendulum.datetime(
-    year = 2023,
-    month = 8,
-    day = 15,
+    year = 2020,
+    month = 1,
+    day = 1,
     tz = 'America/Los_Angeles'
 )
 

@@ -119,7 +119,7 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
 
         # Function to parallelize the download of daily klines for each symbol
         async def _runner():
-            sem = asyncio.Semaphore(30)  # 30 concurrent HTTP requests
+            sem = asyncio.Semaphore(10)  # 30 concurrent HTTP requests
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for i in range(len(binance_metadata)):

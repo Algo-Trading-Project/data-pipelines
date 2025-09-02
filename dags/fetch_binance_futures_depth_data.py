@@ -5,7 +5,7 @@ from datetime import timedelta
 import pendulum
 
 start_date = pendulum.datetime(
-    year = 2023,
+    year = 2018,
     month = 8,
     day = 15,
     tz = 'America/Los_Angeles'
