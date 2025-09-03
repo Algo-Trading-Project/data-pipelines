@@ -9,7 +9,7 @@ import pandas as pd
 import pendulum
 
 def agg_spot_ohlcv_data_1d(**context):
-    date = context['logical_date'] if 'logical_date'
+    date = context['logical_date']
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
