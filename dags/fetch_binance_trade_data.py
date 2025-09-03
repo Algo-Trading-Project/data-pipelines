@@ -8,6 +8,8 @@ start_date = pendulum.datetime(
     year = 2018,
     month = 1,
     day = 1,
+    hour = 0,
+    minute = 30,
     tz = 'America/Los_Angeles'
 )
 
