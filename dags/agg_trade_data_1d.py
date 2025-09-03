@@ -6,14 +6,12 @@ from airflow.sensors.external_task import ExternalTaskSensor
 import duckdb
 import pandas as pd
 import fsspec
+import pendulum
 
 def agg_trade_data_1d(**context):
     date = context['logical_date']
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-
-    print('Aggregating spot trade data for date:', prev_date)
-    print()
     
     RAW_SPOT_TRADES = '~/LocalData/data/ohlcv_data/raw'
     AGG_SPOT_TRADES = '~/LocalData/data/ohlcv_data/agg'
@@ -24,9 +22,6 @@ def agg_trade_data_1d(**context):
     # Expand paths
     input_path = fs.expand_path(f"{RAW_SPOT_TRADES}/symbol_id=*/date={prev_date}/*.parquet")
     output_path = fs.expand_path(f"{AGG_SPOT_TRADES}/")
-    print('Input path:', input_glob)
-    print('Output path:', output_path)
-    print()
 
     query = f"""
     WITH spot_trade_data_agg_1d AS (
@@ -78,9 +73,19 @@ def agg_trade_data_1d(**context):
     """
     duckdb.sql(query)
 
+start_date = pendulum.datetime(
+    year=2020,
+    month=1,
+    day=1,
+    tz='America/Los_Angeles'
+)
+
 with DAG(
     dag_id="agg_spot_trade_data_1d",
-    catchup=False
+    start_date=start_date,
+    schedule_interval='@daily',
+    catchup=False,
+    max_active_runs=1
 ) as dag:
 
     wait_for_fetch = ExternalTaskSensor(

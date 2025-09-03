@@ -6,17 +6,12 @@ from airflow.sensors.external_task import ExternalTaskSensor
 import duckdb
 import fsspec
 import pandas as pd
-from datetime import datetime
+import pendulum
 
 def agg_spot_ohlcv_data_1d(**context):
     date = context['logical_date'] if 'logical_date'
-    print('Starting aggregation for date:', date)
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-
-    print('Starting aggregation for date:', date.strftime('%Y-%m-%d'))
-    print('Collecting data for previous date:', prev_date)
-    print()
 
     RAW_SPOT_OHLCV = '~/LocalData/data/ohlcv_data/raw'
     AGG_SPOT_OHLCV = '~/LocalData/data/ohlcv_data/agg'
@@ -27,9 +22,6 @@ def agg_spot_ohlcv_data_1d(**context):
     # Expand paths
     input_path = fs.expand_path(f"{RAW_SPOT_OHLCV}/symbol_id=*/date={prev_date}/*.parquet")
     output_path = fs.expand_path(f"{AGG_SPOT_OHLCV}/")
-    print('Input path:', input_glob)
-    print('Output path:', output_path)
-    print()
 
     # DuckDB query (left-labeled)
     query = f"""
@@ -47,7 +39,7 @@ def agg_spot_ohlcv_data_1d(**context):
                     last(close) AS close,
                     sum(volume) AS volume,
                     sum(trades) AS trades
-                FROM read_parquet('{input_glob}', hive_partitioning=true)
+                FROM read_parquet('{input_path}', hive_partitioning=true)
                 GROUP BY date_trunc('day', time_period_end), asset_id_base, asset_id_quote, exchange_id
             )
             SELECT * FROM ohlcv_agg_1d
@@ -62,10 +54,18 @@ def agg_spot_ohlcv_data_1d(**context):
     """
     duckdb.sql(query)
 
+start_date = pendulum.datetime(
+    year=2018,
+    month=1,
+    day=1,
+    tz='America/Los_Angeles'
+)
+
 # Define DAG
 with DAG(
     dag_id="agg_spot_ohlcv_data_1d",
-    start_date=datetime(2018, 1, 1),
+    start_date=start_date,
+    schedule_interval='@daily',
     catchup=False,
     max_active_runs=1,
 ) as dag:

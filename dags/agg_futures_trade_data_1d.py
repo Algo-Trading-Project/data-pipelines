@@ -15,9 +15,6 @@ def agg_futures_trade_data_1d(**context):
     date = pd.to_datetime(date)  
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
-    print('Aggregating futures trade data for date:', prev_date)
-    print()
-
     RAW_FUTURES_TRADES = '~/LocalData/data/ohlcv_data/raw'
     AGG_FUTURES_TRADES = '~/LocalData/data/ohlcv_data/agg'
 
@@ -73,14 +70,12 @@ def agg_futures_trade_data_1d(**context):
         COMPRESSION 'SNAPPY',
         PARTITION_BY (symbol_id, date),
         WRITE_PARTITION_COLUMNS true,
-
     );
     """
     duckdb.sql(query)
 
-# Start time is Jan 1, 2018 at 12:30 AM
 start_date = pendulum.datetime(
-    year=2018,
+    year=2020,
     month=1,
     day=1,
     tz='America/Los_Angeles'
@@ -88,9 +83,10 @@ start_date = pendulum.datetime(
 
 with DAG(
     dag_id="agg_futures_trade_data_1d",
-    catchup=False,
     start_date=start_date,
-    schedule='@daily',
+    schedule_interval='@daily',
+    catchup=False,
+    max_active_runs=1
 ) as dag:
 
     wait_for_fetch = ExternalTaskSensor(
@@ -106,8 +102,7 @@ with DAG(
         
     make = PythonOperator(
         task_id="build_futures_trade_features",
-        python_callable=agg_futures_trade_data_1d,
-        op_kwargs={"date": "{{ ds }}"}
+        python_callable=agg_futures_trade_data_1d
     )
 
     finish = EmptyOperator(task_id="finish")

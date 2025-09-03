@@ -6,16 +6,13 @@ from airflow.sensors.external_task import ExternalTaskSensor
 import duckdb
 import pandas as pd
 import fsspec
+import pendulum
 
 def agg_futures_ohlcv_data_1d_duckdb(**context):
     date = context['logical_date']
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
     
-    print('Starting aggregation for date:', date.strftime('%Y-%m-%d'))
-    print('Collecting data for previous date:', prev_date)
-    print()
-
     RAW_FUTURES_OHLCV = '~/LocalData/data/futures_ohlcv_data/raw'
     AGG_FUTURES_OHLCV = '~/LocalData/data/futures_ohlcv_data/agg'
 
@@ -25,9 +22,7 @@ def agg_futures_ohlcv_data_1d_duckdb(**context):
     # Expand paths
     input_path = fs.expand_path(f"{RAW_FUTURES_OHLCV}/symbol_id=*/date={prev_date}/*.parquet")
     output_path = fs.expand_path(f"{AGG_FUTURES_OHLCV}/")
-    print('Input path:', input_glob)
-    print('Output path:', output_path)
-    print()
+
     # DuckDB SQL query for 1D aggregation (right-labeled)
     query = f"""
         WITH futures_ohlcv_agg_1d AS (
@@ -59,10 +54,20 @@ def agg_futures_ohlcv_data_1d_duckdb(**context):
     """
     duckdb.sql(query)
 
+start_date = pendulum.datetime(
+    year=2020,
+    month=1,
+    day=1,
+    tz='America/Los_Angeles'
+)
+
 # Define Airflow DAG
 with DAG(
     dag_id="agg_futures_ohlcv_data_1d",
+    start_date=start_date,
+    schedule_interval="@daily",
     catchup=False,
+    max_active_runs=1
 ) as dag:
 
     wait_for_fetch = ExternalTaskSensor(
@@ -78,8 +83,7 @@ with DAG(
 
     aggregate = PythonOperator(
         task_id="aggregate_futures_ohlcv",
-        python_callable=agg_futures_ohlcv_data_1d_duckdb,
-        op_kwargs={"date": "{{ ds }}"},
+        python_callable=agg_futures_ohlcv_data_1d_duckdb
     )
     
     finish = EmptyOperator(task_id="finish")
