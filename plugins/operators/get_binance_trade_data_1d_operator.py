@@ -48,7 +48,7 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
                     if response.status != 200:
                         self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {response.status} for {base}/{quote} from {url}')
                         # Log missing data to a file for later review
-                        log_path = Path.home() / "LocalData" / "datea" / "trade_data" / "logs" / "error_log.log"
+                        log_path = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
                         symbol_id = f"{base}_{quote}_{exchange}"
                         # date, symbol_id, HTTP status code (optional), Exception message (optional)
                         row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'

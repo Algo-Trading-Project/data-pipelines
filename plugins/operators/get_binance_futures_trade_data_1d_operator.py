@@ -15,7 +15,7 @@ class GetBinanceFuturesTradeDataDailyOperator(BaseOperator):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
  
-    def _upload_new_trade_data(self, futures_trade_data, time_start):
+    def _upload_new_futures_trade_data(self, futures_trade_data, time_start):
         data_to_upload = pd.DataFrame(futures_trade_data)
         date = time_start.strftime('%Y-%m-%d')
         symbol_id = f"{data_to_upload['asset_id_base'][0]}_{data_to_upload['asset_id_quote'][0]}_{data_to_upload['exchange_id'][0]}"
@@ -126,5 +126,5 @@ class GetBinanceFuturesTradeDataDailyOperator(BaseOperator):
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 for e in [r for r in results if isinstance(r, Exception)]:
                     self.log.warning(f'Error in task: {e}')
-                    
+
         asyncio.run(_runner())
