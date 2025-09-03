@@ -14,24 +14,16 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-    def _get_next_start_date(self, coinapi_token):                
-        # Get the next start date for the current token
-        next_start_date = pd.to_datetime(coinapi_token['futures_candle_data_end'], unit = 'ms') 
-
-        # If there is no next start date, use the token's initial start date
-        if pd.isnull(next_start_date):
-            return pd.to_datetime(coinapi_token['futures_candle_data_start'], unit = 'ms')
-        else:
-            return next_start_date    
  
     def _upload_new_futures_ohlcv_data(self, futures_ohlcv_data, time_start):
         data_to_upload = pd.DataFrame(futures_ohlcv_data)
         date = time_start.strftime('%Y-%m-%d')
         symbol_id = f'{data_to_upload["asset_id_base"].iloc[0]}_{data_to_upload["asset_id_quote"].iloc[0]}_{data_to_upload["exchange_id"].iloc[0]}'
-        output_path = f'~/LocalData/data/futures_ohlcv_data/raw/symbol_id={symbol_id}/date={date}/futures_ohlcv_data.parquet'
-        # Ensure the directory exists
-        pathlib.Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        base_dir = pathlib.Path.home() / 'LocalData' / 'data' / 'futures_ohlcv_data' / 'raw'
+        dir_path = base_dir / f'symbol_id={symbol_id}' / f'date={date}'
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        output_path = dir_path / 'futures_ohlcv_data.parquet'
         data_to_upload.to_parquet(output_path, index=False, compression='snappy')
             
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
@@ -47,6 +39,12 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
         coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
 
+    def _write_to_log(self, path, data):
+        # Ensure the directory exists or create it
+        pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'a') as f:
+            f.write(data)
+
     async def _get_futures_ohlcv_data(self, session, sem, time_start, coinapi_token, binance_metadata):
         year = time_start.year
         month = f'{time_start.month:02d}'
@@ -55,28 +53,46 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         url = f'https://data.binance.vision/data/futures/um/daily/klines/{base}{quote}/1m/{base}{quote}-1m-{year}-{month}-{day}.zip'
         print(f'Retrieving data on {month}-{day}-{year} for {base}/{quote}...')
         print()
+
+        # Request data from Binance
         try:
             async with sem:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as response:
                     if response.status != 200:
-                        print(f'Error retrieving data for {month}-{year}-{day}: {response.status}')
-                        print(f'URL: {url}')
-                        print(f'Response: {await response.text()}')
-                        print()
+                        self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {response.status} for {base}/{quote} from {url}')
+                        # Log missing data to a file for later review
+                        log_dir = pathlib.Path.home() / 'LocalData' / 'data' / 'futures_ohlcv_data' / 'logs' / 'error_log.log'
+                        symbol_id = f'{base}_{quote}_{exchange}'
+                        # date, symbol_id, HTTP status code (optional), Exception message (optional)
+                        row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'
+                        self._write_to_log(log_dir, row)
                         return
-                    content = await response.read()
-        except Exception as e:
-            print(f'Error retrieving data for {month}-{year}-{day}: {str(e)}')
-            print(f'URL: {url}')
-            print()
-            return
 
-        with zipfile.ZipFile(io.BytesIO(content)) as z:
-            with z.open(f'{base}{quote}-1m-{year}-{month}-{day}.csv') as f:
-                df = pd.read_csv(f, header = None)
+                    content = await response.read()
+
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                with z.open(f'{base}{quote}-1m-{year}-{month}-{day}.csv') as f:
+                    df = pd.read_csv(f, header = None)
+
+        except Exception as e:
+            self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {str(e)} for {base}/{quote} from {url}')
+            # Log missing data to a file for later review
+            log_dir = pathlib.Path.home() / 'LocalData' / 'data' / 'futures_ohlcv_data' / 'logs' / 'error_log.log'
+            symbol_id = f'{base}_{quote}_{exchange}'
+            # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            row = f'{year}-{month}-{day},{symbol_id},null,{str(e)}' + '\n'
+            self._write_to_log(log_dir, row)
+            return
         
+        # Check if DataFrame is empty
         if df.empty:
-            print(f'No data found for {base}/{quote} on {month}-{day}-{year}.')
+            self.log.info(f'No data found for {base}/{quote} on {month}-{day}-{year}.')
+            # Log missing data to a file for later review
+            log_dir = pathlib.Path.home() / 'LocalData' / 'data' / 'futures_ohlcv_data' / 'logs' / 'error_log.log'
+            symbol_id = f'{base}_{quote}_{exchange}'
+            # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            row = f'{year}-{month}-{day},{symbol_id},null,Empty' + '\n'
+            self._write_to_log(log_dir, row)
             return
 
         df.columns = ['time_period_start', 'open', 'high', 'low', 'close', 'volume', 'time_period_end', 'quote_volume', 'trades', 'taker_buy_volume', 'taker_buy_quote_volume', 'ignore']
@@ -86,22 +102,22 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         df['exchange_id'] = exchange
 
         try:
-            df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms').dt.round('1min')
-            df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms').dt.round('1min')
-            max_date = df['time_period_end'].max()
+            df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms')
+            df['time_period_start'] = df['time_period_start'].dt.round('T')
+            df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms')
+            df['time_period_end'] = df['time_period_end'].dt.round('T')
         except Exception as e:
             # drop first row since it has header info
             df = df.iloc[1:]
-            df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms').dt.round('1min')
-            df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms').dt.round('1min')
-            max_date = df['time_period_end'].max()
+            df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms')
+            df['time_period_start'] = df['time_period_start'].dt.round('T')
+            df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms')
+            df['time_period_end'] = df['time_period_end'].dt.round('T')
 
         # Fill potentially missing minutes and forward fill
-        df = df.set_index('time_period_end').resample('1min').ffill().reset_index()
-
-        print(df.head())
-        print()
+        df = df.set_index('time_period_end').asfreq('1min').ffill().reset_index()
         self._upload_new_futures_ohlcv_data(df, time_start=time_start)
+
         # Operator only gets yesterday's data, so no need to update the metadata
         # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
                
@@ -113,29 +129,27 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         binance_metadata = pd.read_json(path, lines = True)
 
         # target date = previous UTC day of execution_date
-        exec_date = context['execution_date'].astimezone(pendulum.timezone('UTC'))
-        target_day = (exec_date - timedelta(days=1)).date()
-        self.log.info("Fetching daily klines for %s", target_day)
+        exec_date = context['logical_date'].replace(tzinfo=pendulum.timezone('UTC'))
+        target_date = (exec_date - timedelta(days=1)).date()
+        
+        self.log.info("Fetching 1 day of minute OHLCV data for Binance Futures for all symbols...")
 
-        # Function to parallelize the download of daily klines for each symbol
+        # Function to parallelize the download of daily OHLCV data for all tokens
         async def _runner():
-            sem = asyncio.Semaphore(10)  # 30 concurrent HTTP requests
+            sem = asyncio.Semaphore(10)
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for i in range(len(binance_metadata)):
-                    base = binance_metadata.iloc[i]['asset_id_base']
-                    quote = binance_metadata.iloc[i]['asset_id_quote']
-                    exchange = binance_metadata.iloc[i]['exchange_id']
-                    coinapi_token = binance_metadata.iloc[i]
                     tasks.append(
                         self._get_futures_ohlcv_data(
-                            session=session,
-                            sem=sem,
-                            time_start=target_day,
-                            coinapi_token=coinapi_token,
-                            binance_metadata=binance_metadata
+                            session, 
+                            sem, 
+                            target_date,
+                            binance_metadata.iloc[i],
+                            binance_metadata
                         )
                     )
+
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 for e in [r for r in results if isinstance(r, Exception)]:
                     self.log.warning(f'Error in task: {e}')
@@ -143,4 +157,4 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
         asyncio.run(_runner())
 
         # save updated metadata once at end
-        binance_metadata.to_json(path, orient='records', lines=True)
+        # binance_metadata.to_json(path, orient='records', lines=True)

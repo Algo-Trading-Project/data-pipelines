@@ -8,41 +8,30 @@ import io
 import aiohttp
 import asyncio
 import pathlib
+import pendulum
+from pathlib import Path
 
 class GetBinanceTradeDataDailyOperator(BaseOperator):
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-    def _get_next_start_date(self, coinapi_token):                
-        # Get the next start date for the current token
-        next_start_date = pd.to_datetime(coinapi_token['trade_data_end'], unit = 'ms') 
-
-        # If there is no next start date, use the token's initial start date
-        if pd.isnull(next_start_date):
-            return pd.to_datetime(coinapi_token['trade_data_start'], unit = 'ms')
-        else:
-            return next_start_date    
  
     def _upload_new_trade_data(self, trade_data, time_start):
         data_to_upload = pd.DataFrame(trade_data)
         date = time_start.strftime('%Y-%m-%d')
         symbol_id = f"{data_to_upload['asset_id_base'][0]}_{data_to_upload['asset_id_quote'][0]}_{data_to_upload['exchange_id'][0]}"
-        output_path = f'~/LocalData/data/trade_data/raw/symbol_id={symbol_id}/date={date}/trade_data.parquet'
-        data_to_upload.to_parquet(path, index = False, compression = 'snappy')
+        base_dir = pathlib.Path.home() / "LocalData" / "data" / "trade_data" / "raw"
+        dir_path = base_dir / f"symbol_id={symbol_id}" / f"date={date}"
+        dir_path.mkdir(parents = True, exist_ok = True)
 
-    def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
-        asset_id_base = coinapi_token['asset_id_base']
-        asset_id_quote = coinapi_token['asset_id_quote']
-        exchange_id = coinapi_token['exchange_id']
+        output_path = dir_path / "trade_data.parquet"
+        data_to_upload.to_parquet(output_path, index = False, compression = 'snappy')
 
-        # Update next scrape date for current token locally
-        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
-        coinapi_pairs_df.loc[predicate, 'trade_data_end'] = next_start_date
-
-        # Write the metadata to a local JSON file
-        metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
-        coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
+    def _write_to_log(self, path, data):
+        # Ensure the directory exists or create it
+        pathlib.Path(path).parent.mkdir(parents = True, exist_ok = True)
+        with open(path, 'a') as f:
+            f.write(data)
 
     async def _get_trade_data(self, session, sem, time_start, coinapi_token, binance_metadata):
         year = time_start.year
@@ -50,27 +39,47 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
         day = f'{time_start.day:02d}'
         base, quote, exchange = coinapi_token['asset_id_base'], coinapi_token['asset_id_quote'], coinapi_token['exchange_id']
         url = f'https://data.binance.vision/data/spot/daily/trades/{base}{quote}/{base}{quote}-trades-{year}-{month}-{day}.zip'
-        print(f'Retrieving data for {month}-{day}-{year} for {base}/{quote}...')
-        print()
+        self.log.info(f'Retrieving data for {month}-{day}-{year} for {base}/{quote}...')
+
+        # Request data from Binance
         try:
             async with sem:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=180)) as response:
                     if response.status != 200:
-                        print(f'Error retrieving data for {month}-{year}-{day}: {response.status}')
-                        print(f'URL: {url}')
-                        print(f'Response: {await response.text()}')
-                        print()
+                        self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {response.status} for {base}/{quote} from {url}')
+                        # Log missing data to a file for later review
+                        log_path = Path.home() / "LocalData" / "datea" / "trade_data" / "logs" / "error_log.log"
+                        symbol_id = f"{base}_{quote}_{exchange}"
+                        # date, symbol_id, HTTP status code (optional), Exception message (optional)
+                        row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'
+                        self._write_to_log(log_path, row)
                         return
+
                     content = await response.read()
+
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                with z.open(f'{base}{quote}-trades-{year}-{month}-{day}.csv') as f:
+                    df = pd.read_csv(f, header = None)
+
         except Exception as e:
-            print(f'Error retrieving data for {month}-{year}-{day}: {str(e)}')
-            print(f'URL: {url}')
-            print()
+            self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {str(e)} for {base}/{quote} from {url}')
+            # Log missing data to a file for later review
+            log_dir = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
+            symbol_id = f"{base}_{quote}_{exchange}"
+            # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            row = f'{year}-{month}-{day},{symbol_id},null,{str(e)}' + '\n'
+            self._write_to_log(log_dir, row)
             return
 
-        with zipfile.ZipFile(io.BytesIO(content)) as z:
-            with z.open(f'{base}{quote}-trades-{year}-{month}-{day}.csv') as f:
-                df = pd.read_csv(f, header = None)
+        if df.empty:
+            self.log.info(f'No trade data available for {base}/{quote} on {month}-{day}-{year}.')
+            # Log missing data to a file for later review
+            log_path = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
+            symbol_id = f"{base}_{quote}_{exchange}"
+            # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            row = f'{year}-{month}-{day},{symbol_id},null,Empty' + '\n'
+            self._write_to_log(log_path, row)
+            return
 
         df.columns = ['trade_id', 'price', 'qty', 'quote_qty', 'time', 'is_buyer_maker', 'is_best_match']
         df['side'] = np.where(df['is_buyer_maker'] == True, 'sell', 'buy')
@@ -86,24 +95,19 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
         df = df.rename(columns = {'time': 'timestamp', 'qty': 'quantity', 'quote_qty': 'quote_quantity'})
         df = df[['trade_id', 'timestamp', 'price', 'quantity', 'quote_quantity', 'side', 'is_best_match', 'asset_id_base', 'asset_id_quote', 'exchange_id']].drop_duplicates(subset = ['trade_id'])
         
-        print(df.head())
-        print()
-
-        max_date = df['timestamp'].max()
-
         self._upload_new_trade_data(df, time_start = time_start)
-        # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
-               
+                       
     def execute(self, context):
         path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
         binance_metadata = pd.read_json(path, lines = True)
-        execution_date = context['execution_date']
+        execution_date = context['logical_date'].astimezone(pendulum.timezone('UTC'))
         target_date = (execution_date - timedelta(days = 1)).date()
-        self.log.info(f'GetBinanceTradeDataOperator: Target date for trade data: {target_date}')
-        self.log.info('GetBinanceTradeDataOperator: ')
+        
+        self.log.info(f'Starting trade data retrieval for {target_date}...')
 
+        # Function to parallelize the download of daily trade data for all tokens
         async def _runner():
-            sem = asyncio.Semaphore(10)
+            sem = asyncio.Semaphore(5)
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for i in range(len(binance_metadata)):
@@ -116,8 +120,10 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
                             binance_metadata
                         )
                     )
+
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 for e in [r for r in results if isinstance(r, Exception)]:
                     self.log.warning(f'Error in task: {e}')
+                    
         asyncio.run(_runner())
                     
