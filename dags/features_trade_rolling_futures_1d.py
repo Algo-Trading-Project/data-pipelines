@@ -3,14 +3,6 @@ from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-
-# from datasets import (
-#     AGG_FUTURES_TRADES, ROLLING_FUTURES_TRADES
-# )
-
-AGG_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/agg")
-ROLLING_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/rolling")
 
 # ----------------------- DuckDB SQL (parameterised) -----------------------
 _SQL_TEMPLATE = """
@@ -195,7 +187,9 @@ COPY (SELECT * FROM latest)
 TO {out_dir} (
     FORMAT PARQUET,
     COMPRESSION 'SNAPPY',
-    PARTITION_BY (symbol_id, date)
+    PARTITION_BY (symbol_id, date),
+    WRITE_PARTITION_COLUMNS true,
+    OVERWRITE
 );
 """
 # ----------------------- Execution helper ---------------------------------
@@ -207,7 +201,6 @@ def _run_duckdb_rolling(exec_date, input_dir: str, output_dir: str):
 # ----------------------- DAG: FUTURES -------------------------------------
 with DAG(
     dag_id="futures_trade_features_rolling_1d",
-    schedule=[AGG_FUTURES_TRADES],
     catchup=False,
 ) as dag:
     compute = PythonOperator(
@@ -219,5 +212,5 @@ with DAG(
             'output_dir': ROLLING_FUTURES_TRADES.uri,
         },
     )
-    finish = EmptyOperator(task_id="finish", outlets=[ROLLING_FUTURES_TRADES])
+    finish = EmptyOperator(task_id="finish")
     compute >> finish

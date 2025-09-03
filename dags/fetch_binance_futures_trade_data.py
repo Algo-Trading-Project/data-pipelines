@@ -2,12 +2,8 @@ from airflow import DAG
 from operators.get_binance_futures_trade_data_1d_operator import GetBinanceFuturesTradeDataDailyOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import timedelta
-from airflow.datasets import Dataset
 
-# from datasets import RAW_FUTURES_TRADES
 import pendulum
-
-RAW_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/raw")
 
 start_date = pendulum.datetime(
     year = 2020,
@@ -27,6 +23,6 @@ with DAG(
     futures_trade_data_to_duck_db = GetBinanceFuturesTradeDataDailyOperator(
         task_id = 'futures_trade_data_to_duck_db'
     )
-    finish = EmptyOperator(task_id = 'finish', outlets = [RAW_FUTURES_TRADES])
+    finish = EmptyOperator(task_id = 'finish_futures_trade_data')
 
     futures_trade_data_to_duck_db >> finish

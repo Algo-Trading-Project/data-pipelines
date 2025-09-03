@@ -3,29 +3,30 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-# from datasets import RAW_FUTURES_TRADES, AGG_FUTURES_TRADES
+from airflow.sensors.external_task import ExternalTaskSensor
 
 import duckdb
 import pandas as pd
 import fsspec
+import pendulum
 
-RAW_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/raw")
-AGG_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/agg")
-
-def agg_futures_trade_data_1d(date):
-    date = pd.to_datetime(date)
+def agg_futures_trade_data_1d(**context):
+    date = context['logical_date']
+    date = pd.to_datetime(date)  
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
-    # Setup fsspec filesystem
-    fs = fsspec.filesystem('file') if RAW_FUTURES_TRADES.uri.startswith('~') or RAW_FUTURES_TRADES.uri.startswith('/') else fsspec.filesystem('s3')
+    print('Aggregating futures trade data for date:', prev_date)
+    print()
 
-    # Normalize base URIs
-    input_root = fs.expand_path(RAW_FUTURES_TRADES.uri)
-    output_root = fs.expand_path(AGG_FUTURES_TRADES.uri)
-    
-    input_path = f"{input_root}/symbol_id=*/date={prev_date}/*.parquet"
-    output_path = f"{output_root}/"
+    RAW_FUTURES_TRADES = '~/LocalData/data/ohlcv_data/raw'
+    AGG_FUTURES_TRADES = '~/LocalData/data/ohlcv_data/agg'
+
+    # Setup filesystem
+    fs = fsspec.filesystem('file') 
+
+    # Expand paths
+    input_path = fs.expand_path(f"{RAW_FUTURES_TRADES}/symbol_id=*/date={prev_date}/*.parquet")
+    output_path = fs.expand_path(f"{AGG_FUTURES_TRADES}/")
 
     query = f"""
     WITH futures_trade_data_agg_1d AS (
@@ -77,14 +78,38 @@ def agg_futures_trade_data_1d(date):
     """
     duckdb.sql(query)
 
+# Start time is Jan 1, 2018 at 12:30 AM
+start_date = pendulum.datetime(
+    year=2018,
+    month=1,
+    day=1,
+    tz='America/Los_Angeles'
+)
+
 with DAG(
     dag_id="agg_futures_trade_data_1d",
-    schedule=[RAW_FUTURES_TRADES],
-    catchup=False
+    catchup=False,
+    start_date=start_date,
+    schedule='@daily',
 ) as dag:
+
+    wait_for_fetch = ExternalTaskSensor(
+        task_id='wait_for_fetch_futures_trade_1d',
+        external_dag_id='fetch_binance_futures_trade_data',
+        external_task_id='finish_futures_trade_data',
+        mode='reschedule',
+        poke_interval=60, # 1 minute
+        timeout=60 * 60, # 1 hour
+        allowed_states=['success'],
+        failed_states=['failed', 'skipped'],
+    )
+        
     make = PythonOperator(
         task_id="build_futures_trade_features",
         python_callable=agg_futures_trade_data_1d,
         op_kwargs={"date": "{{ ds }}"}
     )
-    finish = EmptyOperator(task_id="finish", outlets=[AGG_FUTURES_TRADES])
+
+    finish = EmptyOperator(task_id="finish")
+
+    wait_for_fetch >> make >> finish

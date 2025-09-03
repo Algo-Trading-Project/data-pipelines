@@ -1,5 +1,6 @@
 import duckdb
 import pandas as pd
+import pendulum
 
 from datetime import timedelta
 from airflow import DAG
@@ -7,19 +8,6 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from sklearn.pipeline import Pipeline
 from analysis.ml.custom_transformers import *
-from airflow.datasets import Dataset
-
-# from datasets import (
-    # ROLLING_SPOT_TRADES, ROLLING_FUTURES_TRADES,
-    # AGG_SPOT_OHLCV, AGG_FUTURES_OHLCV,
-    # FINAL_ML_FEATURES
-# )
-
-ROLLING_SPOT_TRADES = Dataset("~/LocalData/data/trade_data/rolling")
-ROLLING_FUTURES_TRADES = Dataset("~/LocalData/data/futures_trade_data/rolling")
-AGG_SPOT_OHLCV = Dataset("~/LocalData/data/ohlcv_data/agg")
-AGG_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/agg")
-FINAL_ML_FEATURES = Dataset("~/LocalData/data/ml_features")
 
 def generate_ml_features(exec_date):
     cutoff = (exec_date - timedelta(days=365)).date()
@@ -119,10 +107,18 @@ def generate_ml_features(exec_date):
         )
         """)
 
+start_date = pendulum.datetime(
+    year=2018,
+    month=1,
+    day=1,
+    tz='America/Los_Angeles'
+)
+
 with DAG(
     dag_id="generate_final_ml_features",
-    schedule=[ROLLING_SPOT_TRADES, ROLLING_FUTURES_TRADES, AGG_SPOT_OHLCV, AGG_FUTURES_OHLCV],
     catchup=False,
+    start_date=start_date,
+    schedule='@daily',
 ) as dag:
     compute = PythonOperator(
         task_id="compute_final_ml_features",
@@ -131,5 +127,5 @@ with DAG(
             'exec_date': "{{ ds }}"
         },
     )
-    finish = EmptyOperator(task_id="finish", outlets=[FINAL_ML_FEATURES])
+    finish = EmptyOperator(task_id="finish")
     compute >> finish

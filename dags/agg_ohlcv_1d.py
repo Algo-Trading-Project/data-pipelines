@@ -1,30 +1,32 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-# from datasets import RAW_SPOT_OHLCV, AGG_SPOT_OHLCV
+from airflow.sensors.external_task import ExternalTaskSensor
 
 import duckdb
 import fsspec
 import pandas as pd
 from datetime import datetime
 
-RAW_SPOT_OHLCV   = Dataset("~/LocalData/data/ohlcv_data/raw")
-AGG_SPOT_OHLCV   = Dataset("~/LocalData/data/ohlcv_data/agg")
-
 def agg_spot_ohlcv_data_1d(**context):
-    date = context['logical_date'] if 'logical_date' in context else context['data_interval_end'].strftime('%Y-%m-%d')
+    date = context['logical_date'] if 'logical_date'
     print('Starting aggregation for date:', date)
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-    date_str = date.strftime('%Y-%m-%d')
 
-    # Determine FS backend
-    fs = fsspec.filesystem('file') if RAW_SPOT_OHLCV.uri.startswith('~') or RAW_SPOT_OHLCV.uri.startswith('/') else fsspec.filesystem('s3')
+    print('Starting aggregation for date:', date.strftime('%Y-%m-%d'))
+    print('Collecting data for previous date:', prev_date)
+    print()
 
-    # Expanded input/output paths
-    input_glob = f"{RAW_SPOT_OHLCV.uri}/symbol_id=*/date={prev_date}/*.parquet"
-    output_path = fs.expand_path(AGG_SPOT_OHLCV.uri)[0]
+    RAW_SPOT_OHLCV = '~/LocalData/data/ohlcv_data/raw'
+    AGG_SPOT_OHLCV = '~/LocalData/data/ohlcv_data/agg'
+
+    # Setup filesystem
+    fs = fsspec.filesystem('file') 
+
+    # Expand paths
+    input_path = fs.expand_path(f"{RAW_SPOT_OHLCV}/symbol_id=*/date={prev_date}/*.parquet")
+    output_path = fs.expand_path(f"{AGG_SPOT_OHLCV}/")
     print('Input path:', input_glob)
     print('Output path:', output_path)
     print()
@@ -59,21 +61,31 @@ def agg_spot_ohlcv_data_1d(**context):
         );
     """
     duckdb.sql(query)
-    print('Aggregation complete for date:', date_str)
 
 # Define DAG
 with DAG(
     dag_id="agg_spot_ohlcv_data_1d",
     start_date=datetime(2018, 1, 1),
-    schedule=[RAW_SPOT_OHLCV],
     catchup=False,
     max_active_runs=1,
 ) as dag:
+    
+    wait_for_fetch = ExternalTaskSensor(
+        task_id='wait_for_fetch_spot_ohlcv_1d',
+        external_dag_id='fetch_binance_ohlcv_data_1m',
+        external_task_id='finish_ohlcv_data',
+        mode='reschedule',
+        poke_interval=60, # 1 minute
+        timeout=60 * 60, # 1 hour
+        allowed_states=['success'],
+        failed_states=['failed', 'skipped'],
+    )
+
     aggregate = PythonOperator(
         task_id="aggregate_spot_ohlcv",
-        python_callable=agg_spot_ohlcv_data_1d,
-        # op_kwargs={"date": "{{ ds }}"},
+        python_callable=agg_spot_ohlcv_data_1d
     )
-    finish = EmptyOperator(task_id="finish", outlets=[AGG_SPOT_OHLCV])
+    
+    finish = EmptyOperator(task_id="finish")
 
-    aggregate >> finish
+    wait_for_fetch >> aggregate >> finish

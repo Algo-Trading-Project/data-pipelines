@@ -1,27 +1,30 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-# from datasets import RAW_FUTURES_OHLCV, AGG_FUTURES_OHLCV
+from airflow.sensors.external_task import ExternalTaskSensor
 
 import duckdb
 import pandas as pd
 import fsspec
 
-RAW_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/raw")
-AGG_FUTURES_OHLCV = Dataset("~/LocalData/data/futures_ohlcv_data/agg")
-
-def agg_futures_ohlcv_data_1d_duckdb(date: str):
+def agg_futures_ohlcv_data_1d_duckdb(**context):
+    date = context['logical_date']
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-    date_str = date.strftime('%Y-%m-%d')
+    
+    print('Starting aggregation for date:', date.strftime('%Y-%m-%d'))
+    print('Collecting data for previous date:', prev_date)
+    print()
+
+    RAW_FUTURES_OHLCV = '~/LocalData/data/futures_ohlcv_data/raw'
+    AGG_FUTURES_OHLCV = '~/LocalData/data/futures_ohlcv_data/agg'
 
     # Setup filesystem
-    fs = fsspec.filesystem('file') if RAW_FUTURES_OHLCV.uri.startswith('~') or RAW_FUTURES_OHLCV.uri.startswith('/') else fsspec.filesystem('s3')
+    fs = fsspec.filesystem('file') 
 
     # Expand paths
-    input_path = fs.expand_path(f"{RAW_FUTURES_OHLCV.uri}/symbol_id=*/date={prev_date}/*.parquet")
-    output_path = fs.expand_path(f"{AGG_FUTURES_OHLCV.uri}")
+    input_path = fs.expand_path(f"{RAW_FUTURES_OHLCV}/symbol_id=*/date={prev_date}/*.parquet")
+    output_path = fs.expand_path(f"{AGG_FUTURES_OHLCV}/")
     print('Input path:', input_glob)
     print('Output path:', output_path)
     print()
@@ -55,19 +58,30 @@ def agg_futures_ohlcv_data_1d_duckdb(date: str):
         );
     """
     duckdb.sql(query)
-    print('Aggregation complete for date:', date_str)
 
 # Define Airflow DAG
 with DAG(
     dag_id="agg_futures_ohlcv_data_1d",
-    schedule=[RAW_FUTURES_OHLCV],
     catchup=False,
 ) as dag:
+
+    wait_for_fetch = ExternalTaskSensor(
+        task_id="wait_for_fetch_futures_ohlcv_data",
+        external_dag_id="fetch_binance_futures_ohlcv_data_1m",
+        external_task_id="finish_futures_ohlcv_data",
+        mode="reschedule",
+        timeout=60 * 60,
+        poke_interval=60,
+        allowed_states=["success"],
+        failed_states=["failed", "skipped"]
+    )
+
     aggregate = PythonOperator(
         task_id="aggregate_futures_ohlcv",
         python_callable=agg_futures_ohlcv_data_1d_duckdb,
         op_kwargs={"date": "{{ ds }}"},
     )
-    finish = EmptyOperator(task_id="finish", outlets=[AGG_FUTURES_OHLCV])
+    
+    finish = EmptyOperator(task_id="finish")
 
-    aggregate >> finish
+    wait_for_fetch >> aggregate >> finish

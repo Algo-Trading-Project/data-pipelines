@@ -8,14 +8,6 @@ from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-
-# from datasets import (
-#     FINAL_ML_FEATURES,
-#     ML_MODELS
-# )
-FINAL_ML_FEATURES = Dataset("~/LocalData/data/ml_features")
-ML_MODELS = Dataset("~/LocalData/data/ml_models")
 
 def train_ml_model(exec_date):
     exec_date = pd.to_datetime(exec_date)
@@ -98,7 +90,6 @@ def train_ml_model(exec_date):
 
 with DAG(
     dag_id="train_ml_model_1mo",
-    schedule=[FINAL_ML_FEATURES],
     catchup=False,
 ) as dag:
     train_model = PythonOperator(
@@ -108,5 +99,5 @@ with DAG(
             'exec_date': "{{ ds }}"
         },
     )
-    finish = EmptyOperator(task_id="finish", outlets=[ML_MODELS])
+    finish = EmptyOperator(task_id="finish")
     train_model >> finish

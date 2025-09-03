@@ -8,6 +8,7 @@ import zipfile
 import io
 import pathlib
 import pendulum
+from pathlib import Path
 
 class GetBinanceOHLCVDataDailyOperator(BaseOperator):
         
@@ -28,8 +29,13 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
         data_to_upload = pd.DataFrame(ohlcv_data)
         date = time_start.strftime('%Y-%m-%d')
         symbol_id = f"{data_to_upload['asset_id_base'].iloc[0]}_{data_to_upload['asset_id_quote'].iloc[0]}_{data_to_upload['exchange_id'].iloc[0]}"
-        output_path = f'~/LocalData/data/ohlcv_data/raw/symbol_id={symbol_id}/date={date}/ohlcv_data.parquet'
-        data_to_upload.to_parquet(output_path, index = False, compression = 'snappy')
+        # Build paths with Path.home() (or use .expanduser() if you keep a string)
+        base_dir = Path.home() / "LocalData" / "data" / "ohlcv_data" / "raw"
+        dir_path = base_dir / f"symbol_id={symbol_id}" / f"date={date}"
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        file_path = dir_path / "ohlcv_data.parquet"
+        data_to_upload.to_parquet(file_path, index=False, compression="snappy")
 
     def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
         asset_id_base = coinapi_token['asset_id_base']
@@ -105,8 +111,10 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
     def execute(self, context):
         path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
         binance_metadata = pd.read_json(path, lines = True)
-        exec_date = context['execution_date'].astimezone(pendulum.timezone('UTC'))
-        target_day = (exec_date - timedelta(days = 1)).date()
+        exec_date = context['logical_date'].astimezone(pendulum.timezone('UTC'))
+        target_date = (exec_date - timedelta(days = 1)).date()
+        print(f'Fetching data for Binance tokens for {target_date}')
+        print()
         self.log.info('GetBinanceOHLCVDataOperator: Executing for target date: {}'.format(target_date))
 
         async def _runner():
@@ -118,7 +126,7 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
                         self._get_ohlcv_data(
                             session, 
                             sem, 
-                            target_day,
+                            target_date,
                             binance_metadata.iloc[i],
                             binance_metadata
                         )
@@ -129,7 +137,6 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
                     self.log.warning(f'Error in task: {e}')
 
         asyncio.run(_runner())
-
 
         # save updated metadata once at end
         binance_metadata.to_json(path, orient = 'records', lines = True)

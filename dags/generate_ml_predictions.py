@@ -2,22 +2,12 @@ import duckdb
 import joblib
 import pandas as pd
 import numpy as np
+import pendulum
 
 from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-
-# from datasets import (
-#     FINAL_ML_FEATURES,
-#     ML_PREDICTIONS,
-#     ML_MODELS
-# )
-
-FINAL_ML_FEATURES = Dataset("~/LocalData/data/ml_features")
-ML_PREDICTIONS = Dataset("~/LocalData/data/ml_predictions")
-ML_MODELS = Dataset("~/LocalData/data/ml_models")
 
 def generate_predictions(exec_date):
     exec_date = pd.to_datetime(exec_date)
@@ -87,10 +77,18 @@ def generate_predictions(exec_date):
         index=False
     )
 
+start_date = pendulum.datetime(
+    year=2018,
+    month=1,
+    day=1,
+    tz='America/Los_Angeles'
+)
+
 with DAG(
     dag_id="generate_ml_predictions",
-    schedule=[FINAL_ML_FEATURES, ML_MODELS],
     catchup=False,
+    start_date=start_date,
+    schedule='@daily',
 ) as dag:
     predict = PythonOperator(
         task_id="generate_predictions",
@@ -99,5 +97,5 @@ with DAG(
             'exec_date': "{{ ds }}"
         },
     )
-    finish = EmptyOperator(task_id="finish", outlets=[ML_PREDICTIONS])
+    finish = EmptyOperator(task_id="finish")
     predict >> finish

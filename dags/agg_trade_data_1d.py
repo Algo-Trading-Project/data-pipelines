@@ -1,33 +1,32 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.datasets import Dataset
-
-# from datasets import RAW_SPOT_TRADES, AGG_SPOT_TRADES
+from airflow.sensors.external_task import ExternalTaskSensor
 
 import duckdb
 import pandas as pd
 import fsspec
 
-RAW_SPOT_TRADES   = Dataset("~/LocalData/data/trade_data/raw")
-AGG_SPOT_TRADES   = Dataset("~/LocalData/data/trade_data/agg")
-
 def agg_trade_data_1d(**context):
-    date = context['logical_date'] if 'logical_date' in context else context['data_interval_end'].strftime('%Y-%m-%d')
-    print('Starting aggregation for date:', date)
+    date = context['logical_date']
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-    date_str = date.strftime('%Y-%m-%d')
-    
-    # Setup fsspec filesystem
-    fs = fsspec.filesystem('file') if RAW_FUTURES_TRADES.uri.startswith('~') or RAW_FUTURES_TRADES.uri.startswith('/') else fsspec.filesystem('s3')
 
-    # Normalize base URIs
-    input_root = fs.expand_path(RAW_SPOT_TRADES.uri)
-    output_root = fs.expand_path(AGG_SPOT_TRADES.uri)
+    print('Aggregating spot trade data for date:', prev_date)
+    print()
     
-    input_path = f"{input_root}/symbol_id=*/date={prev_date}/*.parquet"
-    output_path = f"{output_root}/"
+    RAW_SPOT_TRADES = '~/LocalData/data/ohlcv_data/raw'
+    AGG_SPOT_TRADES = '~/LocalData/data/ohlcv_data/agg'
+
+    # Setup filesystem
+    fs = fsspec.filesystem('file') 
+
+    # Expand paths
+    input_path = fs.expand_path(f"{RAW_SPOT_TRADES}/symbol_id=*/date={prev_date}/*.parquet")
+    output_path = fs.expand_path(f"{AGG_SPOT_TRADES}/")
+    print('Input path:', input_glob)
+    print('Output path:', output_path)
+    print()
 
     query = f"""
     WITH spot_trade_data_agg_1d AS (
@@ -81,11 +80,21 @@ def agg_trade_data_1d(**context):
 
 with DAG(
     dag_id="agg_spot_trade_data_1d",
-    schedule=[RAW_SPOT_TRADES],
     catchup=False
 ) as dag:
+
+    wait_for_fetch = ExternalTaskSensor(
+        task_id='wait_for_fetch_spot_trade_1d',
+        external_dag_id='fetch_binance_trade_data',
+        external_task_id='finish_trade_data',
+        mode='reschedule',
+        poke_interval=60, # 1 minute
+        timeout=60 * 60, # 1 hour
+        allowed_states=['success'],
+        failed_states=['failed', 'skipped'],
+    )
     make = PythonOperator(
         task_id="build_spot_trade_features",
         python_callable=agg_trade_data_1d
     )
-    finish = EmptyOperator(task_id="finish", outlets=[AGG_SPOT_TRADES])
+    finish = EmptyOperator(task_id="finish")
