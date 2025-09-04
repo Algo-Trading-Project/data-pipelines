@@ -98,8 +98,10 @@ with DAG(
         allowed_states=['success'],
         failed_states=['failed', 'skipped'],
     )
-    make = PythonOperator(
+    aggregate = PythonOperator(
         task_id="build_spot_trade_features",
         python_callable=agg_trade_data_1d
     )
     finish = EmptyOperator(task_id="finish")
+
+    wait_for_fetch >> aggregate >> finish

@@ -100,11 +100,11 @@ with DAG(
         failed_states=['failed', 'skipped'],
     )
         
-    make = PythonOperator(
+    aggregate = PythonOperator(
         task_id="build_futures_trade_features",
         python_callable=agg_futures_trade_data_1d
     )
 
     finish = EmptyOperator(task_id="finish")
 
-    wait_for_fetch >> make >> finish
+    wait_for_fetch >> aggregate >> finish

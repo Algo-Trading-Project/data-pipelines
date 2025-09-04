@@ -2,6 +2,7 @@ from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 
 import duckdb
 import pendulum
@@ -12,7 +13,7 @@ SQL_TEMPLATE = """
         SELECT
             *,
             asset_id_base || '_' || asset_id_quote || '_' || exchange_id AS symbol_id
-        FROM read_parquet(glob('{input_root}/symbol_id=*/date=*/*.parquet'), hive_partitioning=true)
+        FROM read_parquet(glob('{input_dir}/symbol_id=*/date=*/*.parquet'), hive_partitioning=true)
         WHERE date >= DATE '{cutoff}'
     ),
     WITH rolling AS (
@@ -186,7 +187,7 @@ SQL_TEMPLATE = """
         WHERE rn = 1
     )
     COPY (SELECT * FROM latest)
-    TO {out_dir} (
+    TO {ouput_dir} (
         FORMAT PARQUET,
         COMPRESSION 'SNAPPY',
         PARTITION_BY (symbol_id, date),
@@ -197,8 +198,9 @@ SQL_TEMPLATE = """
 # ----------------------- Execution helper ---------------------------------
 
 def _run_duckdb_rolling(exec_date, input_dir: str, output_dir: str):
+    exec_date = pd.to_datetime(exec_date)
     cutoff = (exec_date - timedelta(days=364)).date()
-    duckdb.execute(SQL_TEMPLATE, {'input_dir': input_dir, 'out_dir': output_dir, 'cutoff': cutoff})
+    duckdb.execute(SQL_TEMPLATE, {'input_dir': input_dir, 'output_dir': output_dir, 'cutoff': cutoff})
 
 # ----------------------- DAG: FUTURES -------------------------------------
 
@@ -217,14 +219,27 @@ with DAG(
     AGG_SPOT_TRADES = '~/LocalData/data/trade_data/agg'
     ROLLING_SPOT_TRADES = '~/LocalData/data/trade_data/rolling'
 
+    wait_for_agg = ExternalTaskSensor(
+        task_id="wait_for_agg_spot_trade_data_1d",
+        external_dag_id="agg_spot_trade_data_1d",
+        external_task_id="finish",
+        poke_interval=60,
+        timeout=60 * 60,
+        mode='reschedule',
+        allowed_states=["success"],
+        failed_states=["failed", "skipped"]
+    )
+
     compute = PythonOperator(
         task_id="compute_spot_trade_rolling_features",
         python_callable=_run_duckdb_rolling,
         op_kwargs={
             'exec_date': "{{ ds }}",
-            'input_dir': AGG_SPOT_TRADES.uri,
-            'output_dir': ROLLING_SPOT_TRADES.uri,
+            'input_dir': AGG_SPOT_TRADES,
+            'output_dir': ROLLING_SPOT_TRADES,
         },
     )
+    
     finish = EmptyOperator(task_id="finish")
-    compute >> finish
+    
+    wait_for_agg >> compute >> finish
