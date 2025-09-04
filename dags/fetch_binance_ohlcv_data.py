@@ -16,7 +16,7 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id = 'fetch_binance_ohlcv_data_1m',
     start_date = start_date,
-    schedule_interval = '@daily',
+    schedule = '@daily',
     max_active_runs =  1,
     catchup = False
 ) as dag:

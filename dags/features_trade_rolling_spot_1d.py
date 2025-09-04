@@ -211,7 +211,7 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id="spot_trade_features_rolling_1d",
     start_date=start_date,
-    schedule_interval='@daily',
+    schedule='@daily',
     catchup=False,
     max_active_runs=1
 ) as dag:

@@ -99,14 +99,14 @@ class GetBinanceOHLCVDataOperator(BaseOperator):
 
                             try:
                                 df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit = 'ms')
-                                df['time_period_start'] = df['time_period_start'].dt.round('T')
+                                df['time_period_start'] = df['time_period_start'].dt.round('min')
                                 df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit = 'ms')
-                                df['time_period_end'] = df['time_period_end'].dt.round('T')
+                                df['time_period_end'] = df['time_period_end'].dt.round('min')
                             except Exception as e:
                                 df['time_period_start'] = pd.to_datetime(df['time_period_start'] * 1000, unit = 'ns')
-                                df['time_period_start'] = df['time_period_start'].dt.round('T')
+                                df['time_period_start'] = df['time_period_start'].dt.round('min')
                                 df['time_period_end'] = pd.to_datetime(df['time_period_end'] * 1000, unit = 'ns')
-                                df['time_period_end'] = df['time_period_end'].dt.round('T')
+                                df['time_period_end'] = df['time_period_end'].dt.round('min')
 
                             df['asset_id_base'] = base
                             df['asset_id_quote'] = quote

@@ -128,7 +128,7 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id="generate_final_ml_features",
     start_date=start_date,
-    schedule_interval='@daily',
+    schedule='@daily',
     catchup=False,
     max_active_runs=1
 ) as dag:

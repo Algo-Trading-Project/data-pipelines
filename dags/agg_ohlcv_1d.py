@@ -65,7 +65,7 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id="agg_spot_ohlcv_data_1d",
     start_date=start_date,
-    schedule_interval='@daily',
+    schedule='@daily',
     catchup=False,
     max_active_runs=1,
 ) as dag:

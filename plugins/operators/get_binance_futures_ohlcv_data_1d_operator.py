@@ -76,6 +76,7 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
 
         except Exception as e:
             self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {str(e)} for {base}/{quote} from {url}')
+            self.log.exception(e)
             # Log missing data to a file for later review
             log_dir = pathlib.Path.home() / 'LocalData' / 'data' / 'futures_ohlcv_data' / 'logs' / 'error_log.log'
             symbol_id = f'{base}_{quote}_{exchange}'
@@ -103,16 +104,16 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
 
         try:
             df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms')
-            df['time_period_start'] = df['time_period_start'].dt.round('T')
+            df['time_period_start'] = df['time_period_start'].dt.round('min')
             df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms')
-            df['time_period_end'] = df['time_period_end'].dt.round('T')
+            df['time_period_end'] = df['time_period_end'].dt.round('min')
         except Exception as e:
             # drop first row since it has header info
             df = df.iloc[1:]
             df['time_period_start'] = pd.to_datetime(df['time_period_start'], unit='ms')
-            df['time_period_start'] = df['time_period_start'].dt.round('T')
+            df['time_period_start'] = df['time_period_start'].dt.round('min')
             df['time_period_end'] = pd.to_datetime(df['time_period_end'], unit='ms')
-            df['time_period_end'] = df['time_period_end'].dt.round('T')
+            df['time_period_end'] = df['time_period_end'].dt.round('min')
 
         # Fill potentially missing minutes and forward fill
         df = df.set_index('time_period_end').asfreq('1min').ffill().reset_index()
@@ -140,6 +141,8 @@ class GetBinanceFuturesOHLCVDataDailyOperator(BaseOperator):
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for i in range(len(binance_metadata)):
+                    if binance_metadata.iloc[i]['asset_id_quote'] != 'USDT':
+                        continue
                     tasks.append(
                         self._get_futures_ohlcv_data(
                             session, 
