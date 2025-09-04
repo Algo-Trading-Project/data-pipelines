@@ -1,0 +1,9 @@
+duckdb
+pandas
+numpy
+scikit-learn
+requests
+numba
+apache-airflow
+aiohttp
+lightgbm
