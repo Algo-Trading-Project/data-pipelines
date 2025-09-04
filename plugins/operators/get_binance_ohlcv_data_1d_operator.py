@@ -121,7 +121,7 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
         # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
                
     def execute(self, context):
-        path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
+        path = '/usr/local/airflow/include/binance_metadata.json'
         binance_metadata = pd.read_json(path, lines = True)
         exec_date = context['logical_date'].astimezone(pendulum.timezone('UTC'))
         target_date = (exec_date - timedelta(days = 1)).date()
