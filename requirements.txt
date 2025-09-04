@@ -7,15 +7,6 @@ aiosqlite==0.21.0
 alembic==1.16.4
 annotated-types==0.7.0
 anyio==4.9.0
-apache-airflow==3.0.2
-apache-airflow-core==3.0.2
-apache-airflow-providers-common-compat==1.7.2
-apache-airflow-providers-common-io==1.6.1
-apache-airflow-providers-common-sql==1.27.3
-apache-airflow-providers-fab==2.4.1
-apache-airflow-providers-smtp==2.1.1
-apache-airflow-providers-standard==1.4.0
-apache-airflow-task-sdk==1.0.2
 apispec==6.8.2
 appnope==0.1.4
 argcomplete==3.6.2
