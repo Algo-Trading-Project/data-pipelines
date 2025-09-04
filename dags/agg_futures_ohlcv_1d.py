@@ -38,7 +38,7 @@ def agg_futures_ohlcv_data_1d_duckdb(**context):
                 last(close) AS close,
                 sum(volume) AS volume,
                 sum(trades) AS trades
-            FROM read_parquet('{input_path}')
+            FROM read_parquet('{input_path}', hive_partitioning=true)
             GROUP BY date_trunc('day', time_period_end), asset_id_base, asset_id_quote, exchange_id
         )
         COPY (

@@ -15,8 +15,8 @@ def agg_futures_trade_data_1d(**context):
     date = pd.to_datetime(date)  
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
-    RAW_FUTURES_TRADES = '~/LocalData/data/ohlcv_data/raw'
-    AGG_FUTURES_TRADES = '~/LocalData/data/ohlcv_data/agg'
+    RAW_FUTURES_TRADES = '~/LocalData/data/futures_trade_data/raw'
+    AGG_FUTURES_TRADES = '~/LocalData/data/futures_trade_data/agg'
 
     # Setup filesystem
     fs = fsspec.filesystem('file') 
