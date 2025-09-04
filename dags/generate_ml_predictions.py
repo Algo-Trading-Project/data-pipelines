@@ -86,10 +86,12 @@ start_date = pendulum.datetime(
 
 with DAG(
     dag_id="generate_ml_predictions",
-    catchup=False,
     start_date=start_date,
-    schedule='@daily',
+    schedule_interval='@daily',
+    catchup=False,
+    max_active_runs=1,
 ) as dag:
+
     predict = PythonOperator(
         task_id="generate_predictions",
         python_callable=generate_predictions,

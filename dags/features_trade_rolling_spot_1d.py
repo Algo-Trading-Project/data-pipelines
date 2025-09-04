@@ -1,4 +1,3 @@
-from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
@@ -6,6 +5,7 @@ from airflow.sensors.external_task import ExternalTaskSensor
 
 import duckdb
 import pendulum
+import pandas as pd
 
 # ----------------------- DuckDB SQL (parameterised) -----------------------
 SQL_TEMPLATE = """
@@ -14,9 +14,9 @@ SQL_TEMPLATE = """
             *,
             asset_id_base || '_' || asset_id_quote || '_' || exchange_id AS symbol_id
         FROM read_parquet(glob('{input_dir}/symbol_id=*/date=*/*.parquet'), hive_partitioning=true)
-        WHERE date >= DATE '{cutoff}'
+        WHERE date BETWEEN '{cutoff}' AND '{prev_date}'
     ),
-    WITH rolling AS (
+    rolling AS (
         SELECT
             date,
             asset_id_base,
@@ -177,15 +177,11 @@ SQL_TEMPLATE = """
         FROM rolling
     ),
     latest AS (
-        SELECT * EXCLUDE(rn)
-        FROM (
-            SELECT 
-                *,
-                row_number() OVER (PARTITION BY symbol_id ORDER BY date DESC) AS rn
-            FROM feat
-        )
-        WHERE rn = 1
+        SELECT *
+        FROM feat
+        WHERE date = '{prev_date}'
     )
+
     COPY (SELECT * FROM latest)
     TO {ouput_dir} (
         FORMAT PARQUET,
@@ -199,8 +195,9 @@ SQL_TEMPLATE = """
 
 def _run_duckdb_rolling(exec_date, input_dir: str, output_dir: str):
     exec_date = pd.to_datetime(exec_date)
-    cutoff = (exec_date - timedelta(days=364)).date()
-    duckdb.execute(SQL_TEMPLATE, {'input_dir': input_dir, 'output_dir': output_dir, 'cutoff': cutoff})
+    prev_date = (exec_date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+    cutoff = (prev_date - timedelta(days=364)).date()
+    duckdb.execute(SQL_TEMPLATE, {'input_dir': input_dir, 'output_dir': output_dir, 'cutoff': cutoff, 'prev_date': prev_date})
 
 # ----------------------- DAG: FUTURES -------------------------------------
 
@@ -213,7 +210,10 @@ start_date = pendulum.datetime(
 
 with DAG(
     dag_id="spot_trade_features_rolling_1d",
+    start_date=start_date,
+    schedule_interval='@daily',
     catchup=False,
+    max_active_runs=1
 ) as dag:
 
     AGG_SPOT_TRADES = '~/LocalData/data/trade_data/agg'

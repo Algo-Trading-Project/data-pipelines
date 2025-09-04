@@ -17,7 +17,7 @@ start_date = pendulum.datetime(
 with DAG(
     dag_id = 'fetch_binance_futures_trade_data',
     start_date = start_date,
-    schedule = '@daily',
+    schedule_interval = '@daily',
     max_active_runs =  1,
     catchup = False
 ) as dag:
