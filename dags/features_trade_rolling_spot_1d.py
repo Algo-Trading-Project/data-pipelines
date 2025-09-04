@@ -183,7 +183,7 @@ SQL_TEMPLATE = """
     )
 
     COPY (SELECT * FROM latest)
-    TO {ouput_dir} (
+    TO {output_dir} (
         FORMAT PARQUET,
         COMPRESSION 'SNAPPY',
         PARTITION_BY (symbol_id, date),
