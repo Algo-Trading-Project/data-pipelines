@@ -1,7 +1,6 @@
 from airflow import DAG
 from operators.get_binance_futures_trade_data_1d_operator import GetBinanceFuturesTradeDataDailyOperator
 from airflow.operators.empty import EmptyOperator
-from datetime import timedelta
 
 import pendulum
 

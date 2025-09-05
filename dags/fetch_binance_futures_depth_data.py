@@ -1,7 +1,5 @@
 from airflow import DAG
 from operators.get_binance_futures_depth_data_operator import GetBinanceFuturesDepthDataOperator
-
-from datetime import timedelta
 import pendulum
 
 start_date = pendulum.datetime(

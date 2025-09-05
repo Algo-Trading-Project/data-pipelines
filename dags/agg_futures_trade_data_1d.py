@@ -1,30 +1,33 @@
-# Refactored DAG: Aggregate Futures Trades with Hive-Partitioned COPY
-
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.sensors.external_task import ExternalTaskSensor
+from airflow.models import Variable
 
 import duckdb
 import pandas as pd
-import fsspec
 import pendulum
+import os
 
 def agg_futures_trade_data_1d(**context):
     date = context['logical_date']
-    date = pd.to_datetime(date)  
+    date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    RAW_FUTURES_TRADES = f's3://base-44-data/data/futures_trade_data/raw/symbol_id=*/date={prev_date}/*.parquet'
+    AGG_FUTURES_TRADES = f's3://base-44-data/data/futures_trade_data/agg/'
 
-    RAW_FUTURES_TRADES = '~/LocalData/data/futures_trade_data/raw'
-    AGG_FUTURES_TRADES = '~/LocalData/data/futures_trade_data/agg'
+    # Retrieve AWS credentials from Airflow Variables (Astronomer)
+    aws_key = Variable.get("AWS_ACCESS_KEY_ID")
+    aws_secret = Variable.get("AWS_SECRET_ACCESS_KEY")
+    aws_region = Variable.get("AWS_DEFAULT_REGION")
 
-    # Setup filesystem
-    fs = fsspec.filesystem('file') 
+    # Set environment for DuckDB (legacy auth scheme uses env vars)
+    os.environ['AWS_ACCESS_KEY_ID'] = aws_key
+    os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret
+    os.environ['AWS_DEFAULT_REGION'] = aws_region
 
-    # Expand paths
-    input_path = fs.expand_path(f"{RAW_FUTURES_TRADES}/symbol_id=*/date={prev_date}/*.parquet")
-    output_path = fs.expand_path(f"{AGG_FUTURES_TRADES}/")
-
+    # DuckDB query (left-labeled)
     query = f"""
     WITH futures_trade_data_agg_1d AS (
         SELECT
@@ -59,17 +62,18 @@ def agg_futures_trade_data_1d(**context):
             QUANTILE_CONT(quote_quantity, 0.9) AS "90th_percentile_dollar_volume",
             QUANTILE_CONT(CASE WHEN side = 'buy' THEN quote_quantity ELSE NULL END, 0.9) AS "90th_percentile_buy_dollar_volume",
             QUANTILE_CONT(CASE WHEN side = 'sell' THEN quote_quantity ELSE NULL END, 0.9) AS "90th_percentile_sell_dollar_volume"
-        FROM read_parquet('{input_path}')
+        FROM read_parquet('{RAW_FUTURES_TRADES}', hive_partitioning=true)
         GROUP BY date_trunc('day', timestamp), asset_id_base, asset_id_quote, exchange_id
     )
     COPY (
         SELECT * FROM futures_trade_data_agg_1d
     )
-    TO '{output_path}' (
+    TO '{AGG_FUTURES_TRADES}' (
         FORMAT PARQUET,
         COMPRESSION 'SNAPPY',
         PARTITION_BY (symbol_id, date),
         WRITE_PARTITION_COLUMNS true,
+        OVERWRITE
     );
     """
     duckdb.sql(query)

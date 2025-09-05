@@ -2,26 +2,31 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.sensors.external_task import ExternalTaskSensor
+from airflow.models import Variable
 
 import duckdb
-import fsspec
 import pandas as pd
 import pendulum
+import os
 
 def agg_spot_ohlcv_data_1d(**context):
     date = context['logical_date']
     date = pd.to_datetime(date)
     prev_date = (date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
-    RAW_SPOT_OHLCV = '~/LocalData/data/ohlcv_data/raw'
-    AGG_SPOT_OHLCV = '~/LocalData/data/ohlcv_data/agg'
+    # Define S3 paths
+    RAW_SPOT_OHLCV = f's3://base-44-data/data/ohlcv_data/raw/symbol_id=*/date={prev_date}/*.parquet'
+    AGG_SPOT_OHLCV = f's3://base-44-data/data/ohlcv_data/agg/'
 
-    # Setup filesystem
-    fs = fsspec.filesystem('file') 
+    # Retrieve AWS credentials from Airflow Variables (Astronomer)
+    aws_key = Variable.get("AWS_ACCESS_KEY_ID")
+    aws_secret = Variable.get("AWS_SECRET_ACCESS_KEY")
+    aws_region = Variable.get("AWS_DEFAULT_REGION")
 
-    # Expand paths
-    input_path = fs.expand_path(f"{RAW_SPOT_OHLCV}/symbol_id=*/date={prev_date}/*.parquet")
-    output_path = fs.expand_path(f"{AGG_SPOT_OHLCV}/")
+    # Set environment for DuckDB (legacy auth scheme uses env vars)
+    os.environ['AWS_ACCESS_KEY_ID'] = aws_key
+    os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret
+    os.environ['AWS_DEFAULT_REGION'] = aws_region
 
     # DuckDB query (left-labeled)
     query = f"""
@@ -39,12 +44,12 @@ def agg_spot_ohlcv_data_1d(**context):
                     last(close) AS close,
                     sum(volume) AS volume,
                     sum(trades) AS trades
-                FROM read_parquet('{input_path}', hive_partitioning=true)
+                FROM read_parquet('{RAW_SPOT_OHLCV}', hive_partitioning=true)
                 GROUP BY date_trunc('day', time_period_end), asset_id_base, asset_id_quote, exchange_id
             )
             SELECT * FROM ohlcv_agg_1d
         )
-        TO '{output_path}' (
+        TO '{AGG_SPOT_OHLCV}' (
             FORMAT PARQUET,
             COMPRESSION 'SNAPPY',
             PARTITION_BY (symbol_id, date),

@@ -1,7 +1,5 @@
 from airflow import DAG
 from operators.get_binance_funding_rate_data_operator import GetBinanceFundingRateOperator
-
-from datetime import timedelta
 import pendulum
 
 start_date = pendulum.datetime(

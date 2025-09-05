@@ -1,11 +1,13 @@
-from datetime import timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.sensors.external_task import ExternalTaskSensor
+from airflow.models import Variable
 
 import duckdb
 import pendulum
+import pandas as pd
+import os
 
 # ----------------------- DuckDB SQL (parameterised) -----------------------
 SQL_TEMPLATE = """
@@ -13,7 +15,7 @@ SQL_TEMPLATE = """
         SELECT
             *,
             asset_id_base || '_' || asset_id_quote || '_' || exchange_id AS symbol_id
-        FROM read_parquet(glob('{input_dir}/symbol_id=*/date=*/*.parquet'), hive_partitioning=true)
+        FROM read_parquet('{input_dir}/symbol_id=*/date=*/*.parquet', hive_partitioning=true)
         WHERE date BETWEEN '{cutoff}' AND '{prev_date}'
     ),
     rolling AS (
@@ -196,8 +198,22 @@ SQL_TEMPLATE = """
 def _run_duckdb_rolling(exec_date, input_dir: str, output_dir: str):
     exec_date = pd.to_datetime(exec_date)
     prev_date = (exec_date - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-    cutoff = (prev_date - timedelta(days=364)).date()
-    duckdb.execute(SQL_TEMPLATE, {'input_dir': input_dir, 'output_dir': output_dir, 'cutoff': cutoff, 'prev_date': prev_date})
+    cutoff = (prev_date - pd.Timedelta(days=364)).date()
+
+    # Retrieve AWS credentials from Airflow Variables (Astronomer)
+    aws_key = Variable.get("AWS_ACCESS_KEY_ID")
+    aws_secret = Variable.get("AWS_SECRET_ACCESS_KEY")
+    aws_region = Variable.get("AWS_DEFAULT_REGION")
+
+    # Set environment for DuckDB (legacy auth scheme uses env vars)
+    os.environ['AWS_ACCESS_KEY_ID'] = aws_key
+    os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret
+    os.environ['AWS_DEFAULT_REGION'] = aws_region
+
+    # Execute the DuckDB SQL with parameters
+    conn = duckdb.connect(database=':memory:')
+    conn.execute(SQL_TEMPLATE, {'input_dir': input_dir, 'output_dir': output_dir, 'cutoff': cutoff, 'prev_date': prev_date})
+    conn.close()
 
 # ----------------------- DAG: FUTURES -------------------------------------
 
@@ -216,8 +232,8 @@ with DAG(
     max_active_runs=1
 ) as dag:
     
-    AGG_FUTURES_TRADES = '~/LocalData/data/futures_trade_data/agg'
-    ROLLING_FUTURES_TRADES = '~/LocalData/data/futures_trade_data/rolling'
+    AGG_FUTURES_TRADES = 's3://base-44-data/data/futures_trade_data/agg'
+    ROLLING_FUTURES_TRADES = 's3://base-44-data/data/futures_trade_data/rolling'
 
     wait_for_agg = ExternalTaskSensor(
         task_id="wait_for_agg_futures_trade_data_1d",

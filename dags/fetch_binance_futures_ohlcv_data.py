@@ -1,8 +1,6 @@
 from airflow import DAG
 from operators.get_binance_futures_ohlcv_data_1d_operator import GetBinanceFuturesOHLCVDataDailyOperator
-# Dummy Operator for testing
 from airflow.operators.empty import EmptyOperator
-from datetime import timedelta
 
 import pendulum
 

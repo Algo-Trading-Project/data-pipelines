@@ -1,5 +1,6 @@
 from airflow.models import BaseOperator
 from datetime import timedelta
+from airflow.models import Variable
 
 import pandas as pd
 import asyncio
@@ -8,7 +9,8 @@ import zipfile
 import io
 import pathlib
 import pendulum
-from pathlib import Path
+import duckdb
+import os
 
 class GetBinanceOHLCVDataDailyOperator(BaseOperator):
         
@@ -17,28 +19,39 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
 
     def _upload_new_ohlcv_data(self, ohlcv_data, time_start):
         data_to_upload = pd.DataFrame(ohlcv_data)
-        date = time_start.strftime('%Y-%m-%d')
         symbol_id = f"{data_to_upload['asset_id_base'].iloc[0]}_{data_to_upload['asset_id_quote'].iloc[0]}_{data_to_upload['exchange_id'].iloc[0]}"
-        base_dir = Path.home() / "LocalData" / "data" / "ohlcv_data" / "raw"
-        dir_path = base_dir / f"symbol_id={symbol_id}" / f"date={date}"
-        dir_path.mkdir(parents=True, exist_ok=True)
+        data_to_upload['symbol_id'] = symbol_id
+        date = time_start.strftime('%Y-%m-%d')
+        
+        s3_dir = f's3://base-44-data/data/ohlcv_data/raw/symbol_id={symbol_id}/date={date}/ohlcv_data.parquet'
 
-        output_path = dir_path / "ohlcv_data.parquet"
-        data_to_upload.to_parquet(output_path, index=False, compression="snappy")
+        # Retrieve AWS credentials from Airflow Variables (Astronomer)
+        aws_key = Variable.get("AWS_ACCESS_KEY_ID")
+        aws_secret = Variable.get("AWS_SECRET_ACCESS_KEY")
+        aws_region = Variable.get("AWS_DEFAULT_REGION")
 
-    def _update_coinapi_metadata(self, next_start_date, coinapi_token, coinapi_pairs_df):
-        asset_id_base = coinapi_token['asset_id_base']
-        asset_id_quote = coinapi_token['asset_id_quote']
-        exchange_id = coinapi_token['exchange_id']
+        # Set environment for DuckDB (legacy auth scheme uses env vars)
+        os.environ['AWS_ACCESS_KEY_ID'] = aws_key
+        os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret
+        os.environ['AWS_DEFAULT_REGION'] = aws_region
+        
+        # Register the data_to_upload DataFrame as a DuckDB table
+        con = duckdb.connect(database=':memory:')
+        con.register('data_to_upload', data_to_upload)
 
-        # Update next scrape date for current token locally
-        predicate = (coinapi_pairs_df['exchange_id'] == exchange_id) & (coinapi_pairs_df['asset_id_base'] == asset_id_base) & (coinapi_pairs_df['asset_id_quote'] == asset_id_quote)
-        coinapi_pairs_df.loc[predicate, 'candle_data_end'] = next_start_date
+        # Use DuckDB to write the DataFrame to Parquet on S3
+        con.execute(
+            f"""
+            COPY data_to_upload
+            TO {s3_dir} (
+                FORMAT 'PARQUET',
+                COMPRESSION 'SNAPPY',
+                OVERWRITE
+            );
+            """
+        )
 
-        # Write the metadata to a local JSON file
-        metadata_path = '/Users/louisspencer/Desktop/Trading-Bot-Data-Pipelines/data/binance_metadata.json'
-        coinapi_pairs_df.to_json(metadata_path, orient = 'records', lines = True)
-
+    # TODO: Refactor to write logs to S3 instead of locally
     def _write_to_log(self, path, data):
         # Ensure the directory exists or create it
         pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -60,11 +73,11 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
                     if response.status != 200:
                         self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {response.status} for {base}/{quote} from {url}')
                         # Log missing data to a file for later review
-                        log_path = Path.home() / "LocalData" / "data" / "ohlcv_data" / "logs" / "error_log.log"
-                        symbol_id = f"{base}_{quote}_{exchange}"
-                        # date, symbol_id, HTTP status code (optional), Exception message (optional)
-                        row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'
-                        self._write_to_log(log_path, row)
+                        # log_path = Path.home() / "LocalData" / "data" / "ohlcv_data" / "logs" / "error_log.log"
+                        # symbol_id = f"{base}_{quote}_{exchange}"
+                        # # date, symbol_id, HTTP status code (optional), Exception message (optional)
+                        # row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'
+                        # self._write_to_log(log_path, row)
                         return
                         
                     content = await response.read()
@@ -78,22 +91,22 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
             self.log.exception(e)
             
             # Log missing data to a file for later review
-            log_dir = Path.home() / "LocalData" / "data" / "ohlcv_data" / "logs" / "error_log.log"
-            symbol_id = f"{base}_{quote}_{exchange}"
-            # date, symbol_id, HTTP status code (optional), Exception message (optional)
-            row = f'{year}-{month}-{day},{symbol_id},null,{str(e)}' + '\n'
-            self._write_to_log(log_dir, row)
+            # log_dir = Path.home() / "LocalData" / "data" / "ohlcv_data" / "logs" / "error_log.log"
+            # symbol_id = f"{base}_{quote}_{exchange}"
+            # # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            # row = f'{year}-{month}-{day},{symbol_id},null,{str(e)}' + '\n'
+            # self._write_to_log(log_dir, row)
             return
 
         # Check if DataFrame is empty
         if df.empty:
             self.log.info(f'No data found for {base}/{quote} on {month}-{year}-{day}.')
             # Log missing data to a file for later review
-            log_dir = Path.home() / "LocalData" / "data" / "ohlcv_data" / "logs" / "error_log.log"
-            symbol_id = f"{base}_{quote}_{exchange}"
-            # date, symbol_id, HTTP status code (optional), Exception message (optional)
-            row = f'{year}-{month}-{day},{symbol_id},null,Empty' + '\n'
-            self._write_to_log(log_dir, row)
+            # log_dir = Path.home() / "LocalData" / "data" / "ohlcv_data" / "logs" / "error_log.log"
+            # symbol_id = f"{base}_{quote}_{exchange}"
+            # # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            # row = f'{year}-{month}-{day},{symbol_id},null,Empty' + '\n'
+            # self._write_to_log(log_dir, row)
             return
         
         df.columns = ['time_period_start', 'open', 'high', 'low', 'close', 'volume', 'time_period_end', 'quote_asset_volume', 'trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore']
@@ -121,10 +134,11 @@ class GetBinanceOHLCVDataDailyOperator(BaseOperator):
         # self._update_coinapi_metadata(next_start_date = max_date, coinapi_token = coinapi_token, coinapi_pairs_df = binance_metadata)
                
     def execute(self, context):
+        # Load Binance metadata locally in Astronomer
         path = '/usr/local/airflow/include/binance_metadata.json'
         binance_metadata = pd.read_json(path, lines = True)
         exec_date = context['logical_date'].astimezone(pendulum.timezone('UTC'))
-        target_date = (exec_date - timedelta(days = 1)).date()
+        target_date = (exec_date - pd.Timedelta(days = 1)).date()
         
         self.log.info('Fetching 1 day of MINUTE OHLCV data for Binance Spot for all symbols...')
 

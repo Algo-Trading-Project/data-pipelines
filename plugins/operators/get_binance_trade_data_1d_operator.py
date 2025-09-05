@@ -1,5 +1,6 @@
 from airflow.models import BaseOperator
 from datetime import timedelta
+from airflow.models import Variable
 
 import pandas as pd
 import numpy as np
@@ -9,7 +10,8 @@ import aiohttp
 import asyncio
 import pathlib
 import pendulum
-from pathlib import Path
+import os
+import duckdb
 
 class GetBinanceTradeDataDailyOperator(BaseOperator):
         
@@ -18,14 +20,37 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
  
     def _upload_new_trade_data(self, trade_data, time_start):
         data_to_upload = pd.DataFrame(trade_data)
+        symbol_id = f"{data_to_upload['asset_id_base'].iloc[0]}_{data_to_upload['asset_id_quote'].iloc[0]}_{data_to_upload['exchange_id'].iloc[0]}"
+        data_to_upload['symbol_id'] = symbol_id
         date = time_start.strftime('%Y-%m-%d')
-        symbol_id = f"{data_to_upload['asset_id_base'][0]}_{data_to_upload['asset_id_quote'][0]}_{data_to_upload['exchange_id'][0]}"
-        base_dir = pathlib.Path.home() / "LocalData" / "data" / "trade_data" / "raw"
-        dir_path = base_dir / f"symbol_id={symbol_id}" / f"date={date}"
-        dir_path.mkdir(parents = True, exist_ok = True)
+        
+        s3_dir = f's3://base-44-data/data/trade_data/raw/symbol_id={symbol_id}/date={date}/trade_data.parquet'
 
-        output_path = dir_path / "trade_data.parquet"
-        data_to_upload.to_parquet(output_path, index = False, compression = 'snappy')
+        # Retrieve AWS credentials from Airflow Variables (Astronomer)
+        aws_key = Variable.get("AWS_ACCESS_KEY_ID")
+        aws_secret = Variable.get("AWS_SECRET_ACCESS_KEY")
+        aws_region = Variable.get("AWS_DEFAULT_REGION")
+
+        # Set environment for DuckDB (legacy auth scheme uses env vars)
+        os.environ['AWS_ACCESS_KEY_ID'] = aws_key
+        os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret
+        os.environ['AWS_DEFAULT_REGION'] = aws_region
+        
+        # Register the data_to_upload DataFrame as a DuckDB table
+        con = duckdb.connect(database=':memory:')
+        con.register('data_to_upload', data_to_upload)
+
+        # Use DuckDB to write the DataFrame to Parquet on S3
+        con.execute(
+            f"""
+            COPY data_to_upload
+            TO {s3_dir} (
+                FORMAT 'PARQUET',
+                COMPRESSION 'SNAPPY',
+                OVERWRITE
+            );
+            """
+        )
 
     def _write_to_log(self, path, data):
         # Ensure the directory exists or create it
@@ -48,11 +73,11 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
                     if response.status != 200:
                         self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {response.status} for {base}/{quote} from {url}')
                         # Log missing data to a file for later review
-                        log_path = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
-                        symbol_id = f"{base}_{quote}_{exchange}"
-                        # date, symbol_id, HTTP status code (optional), Exception message (optional)
-                        row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'
-                        self._write_to_log(log_path, row)
+                        # log_path = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
+                        # symbol_id = f"{base}_{quote}_{exchange}"
+                        # # date, symbol_id, HTTP status code (optional), Exception message (optional)
+                        # row = f'{year}-{month}-{day},{symbol_id},{response.status},null' + '\n'
+                        # self._write_to_log(log_path, row)
                         return
 
                     content = await response.read()
@@ -64,21 +89,21 @@ class GetBinanceTradeDataDailyOperator(BaseOperator):
         except Exception as e:
             self.log.warning(f'Error retrieving data for {month}-{year}-{day}: {str(e)} for {base}/{quote} from {url}')
             # Log missing data to a file for later review
-            log_dir = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
-            symbol_id = f"{base}_{quote}_{exchange}"
-            # date, symbol_id, HTTP status code (optional), Exception message (optional)
-            row = f'{year}-{month}-{day},{symbol_id},null,{str(e)}' + '\n'
-            self._write_to_log(log_dir, row)
+            # log_dir = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
+            # symbol_id = f"{base}_{quote}_{exchange}"
+            # # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            # row = f'{year}-{month}-{day},{symbol_id},null,{str(e)}' + '\n'
+            # self._write_to_log(log_dir, row)
             return
 
         if df.empty:
             self.log.info(f'No trade data available for {base}/{quote} on {month}-{day}-{year}.')
             # Log missing data to a file for later review
-            log_path = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
-            symbol_id = f"{base}_{quote}_{exchange}"
-            # date, symbol_id, HTTP status code (optional), Exception message (optional)
-            row = f'{year}-{month}-{day},{symbol_id},null,Empty' + '\n'
-            self._write_to_log(log_path, row)
+            # log_path = Path.home() / "LocalData" / "data" / "trade_data" / "logs" / "error_log.log"
+            # symbol_id = f"{base}_{quote}_{exchange}"
+            # # date, symbol_id, HTTP status code (optional), Exception message (optional)
+            # row = f'{year}-{month}-{day},{symbol_id},null,Empty' + '\n'
+            # self._write_to_log(log_path, row)
             return
 
         df.columns = ['trade_id', 'price', 'qty', 'quote_qty', 'time', 'is_buyer_maker', 'is_best_match']

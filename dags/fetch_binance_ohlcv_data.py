@@ -1,7 +1,6 @@
 from airflow import DAG
 from operators.get_binance_ohlcv_data_1d_operator import GetBinanceOHLCVDataDailyOperator
 from airflow.operators.empty import EmptyOperator
-from datetime import timedelta
 import pendulum
 
 start_date = pendulum.datetime(
